@@ -1,0 +1,3203 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DB Browser — Oracle Schema Explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  /* ── LIGHT THEME (default) ── */
+  :root {
+    --bg: #f4f6fb;
+    --surface: #ffffff;
+    --surface2: #edf0f7;
+    --border: #d0d7e8;
+    --accent: #2563eb;
+    --accent2: #7c3aed;
+    --text: #111111;
+    --muted: #4b5468;
+    --success: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --sans: 'Inter', system-ui, sans-serif;
+    --mark-bg: rgba(37,99,235,.13);
+    --mark-color: #1d4ed8;
+    --shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+
+  /* ── DARK THEME ── */
+  :root.dark {
+    --bg: #0f1117;
+    --surface: #191c25;
+    --surface2: #21253a;
+    --border: #2a2f47;
+    --accent: #4f7fff;
+    --accent2: #7c5af5;
+    --text: #e4e8f7;
+    --muted: #6b7394;
+    --success: #2ecf8a;
+    --warn: #f5a623;
+    --danger: #f55a5a;
+    --mark-bg: rgba(79,127,255,.25);
+    --mark-color: #4f7fff;
+    --shadow: 0 1px 4px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 18.6px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: background .2s, color .2s;
+  }
+
+  /* ── TOPBAR ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 0 20px;
+    height: 58px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+  }
+
+  .logo {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  .logo span { color: var(--accent2); }
+
+  .search-wrap {
+    flex: 1;
+    position: relative;
+    max-width: 380px;
+  }
+  .search-wrap input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 58px 8px 14px;
+    color: var(--text);
+    font-size: 17px;
+    outline: none;
+    transition: border-color .15s;
+    font-family: var(--mono);
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap input::placeholder { color: var(--muted); }
+  .search-icon {
+    position: absolute;
+    right: 32px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+    font-size: 17px;
+  }
+  .search-clear {
+    position: absolute;
+    right: 8px; top: 50%;
+    transform: translateY(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 20px; height: 20px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1;
+    flex-shrink: 0;
+    transition: all .12s;
+  }
+  .search-clear:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+  .search-clear.visible { display: flex; }
+
+  .search-scope { display: flex; gap: 4px; }
+  .scope-btn {
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .scope-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .upload-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 17px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity .15s;
+    font-family: var(--sans);
+  }
+  .upload-btn:hover { opacity: .85; }
+  #fileInput { display: none; }
+
+  .clear-btn {
+    background: var(--surface2);
+    color: var(--danger);
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 15px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s;
+    font-family: var(--sans);
+  }
+  .clear-btn:hover { background: var(--danger); color: #fff; }
+  .clear-btn.hidden { display: none; }
+
+  .theme-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    cursor: pointer;
+    font-size: 19px;
+    line-height: 1;
+    transition: background .15s, border-color .15s;
+    flex-shrink: 0;
+  }
+  .theme-btn:hover { border-color: var(--accent); }
+
+  /* ── LAYOUT ── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* ── SIDEBAR ── */
+  .sidebar {
+    width: 280px;
+    min-width: 180px;
+    max-width: 480px;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 13px 14px 9px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    color: var(--muted);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .tree { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .tree::-webkit-scrollbar { width: 4px; }
+  .tree::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .owner-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .1s;
+  }
+  .owner-header:hover { background: var(--surface2); }
+
+  .owner-header .arrow {
+    width: 13px; height: 13px;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .15s;
+    color: var(--muted);
+    flex-shrink: 0;
+    font-size: 13px;
+  }
+  .owner-node.open .owner-header .arrow { transform: rotate(90deg); }
+
+  .owner-name {
+    font-size: 15px;
+    font-weight: 600;
+    font-family: var(--mono);
+    color: var(--warn);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .count-badge {
+    font-size: 12px;
+    background: var(--border);
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 1px 7px;
+    flex-shrink: 0;
+  }
+
+  .table-list { display: none; padding-left: 28px; }
+  .owner-node.open .table-list { display: block; }
+
+  .table-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 8px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin: 1px 6px 1px 0;
+    transition: background .1s;
+  }
+  .table-item:hover { background: var(--surface2); }
+  .table-item.active { background: rgba(37,99,235,.12); color: var(--accent); }
+  .table-item .tbl-name {
+    font-size: 15px;
+    font-family: var(--mono);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .table-item .tbl-icon { font-size: 13px; color: var(--muted); flex-shrink: 0; }
+
+  /* ── CONTENT ── */
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 24px 32px;
+    overflow: auto;
+  }
+  .empty-hero {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .big-icon { font-size: 38px; line-height: 1; }
+  .empty-hero h2 { font-size: 24px; color: var(--text); font-weight: 700; margin: 0; }
+  .empty-state > p { font-size: 15px; text-align: center; max-width: 700px; line-height: 1.6; color: var(--muted); margin: 0; }
+
+  /* two-column card row */
+  .start-cards {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+    max-width: 860px;
+    align-items: stretch;
+  }
+  .start-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .start-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    flex: 1;
+  }
+  .drop-zone:hover, .drop-zone.dragging { border-color: var(--accent); background: rgba(37,99,235,.04); }
+  .drop-zone .btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 22px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 4px;
+    font-family: var(--sans);
+  }
+
+  .format-tags { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .tag { font-size: 13px; padding: 2px 9px; border-radius: 4px; background: var(--surface2); font-family: var(--mono); }
+
+  /* ── IDBINFO banner ── */
+  .idb-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(37,99,235,.08);
+    border: 1px solid rgba(37,99,235,.2);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-size: 15px;
+    color: var(--text);
+    margin-top: 12px;
+    max-width: 500px;
+  }
+  .idb-banner button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* ── DETAIL ── */
+  .detail { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+  .detail-header {
+    padding: 16px 22px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface);
+  }
+
+  .breadcrumb { font-size: 14px; color: var(--muted); font-family: var(--mono); margin-bottom: 6px; }
+  .breadcrumb .sep { margin: 0 6px; }
+
+  .detail-title {
+    font-size: 24px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .detail-meta { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
+  .meta-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+  }
+  .meta-pill .val { color: var(--text); font-family: var(--mono); }
+
+  /* ── TABS ── */
+  .tabs {
+    display: flex;
+    padding: 0 22px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    background: var(--surface);
+    gap: 0;
+  }
+  .tab {
+    padding: 11px 18px;
+    font-size: 15px;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ── DATA TABLE ── */
+  .tab-content { flex: 1; overflow: auto; padding: 18px 22px; }
+  .tab-content::-webkit-scrollbar { width: 6px; height: 6px; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 15px; font-family: var(--mono); }
+  .data-table thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface2);
+    padding: 9px 13px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+    z-index: 1;
+  }
+  .data-table tbody tr {
+    border-bottom: 1px solid rgba(0,0,0,.05);
+    transition: background .08s;
+  }
+  :root.dark .data-table tbody tr { border-bottom-color: rgba(255,255,255,.04); }
+  .data-table tbody tr:hover { background: var(--surface2); }
+  .data-table tbody td {
+    padding: 8px 13px;
+    vertical-align: top;
+    color: var(--text);
+    max-width: 340px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .type-badge {
+    display: inline-block;
+    font-size: 12px;
+    padding: 1px 7px;
+    border-radius: 4px;
+    background: rgba(37,99,235,.1);
+    color: var(--accent);
+    font-family: var(--mono);
+  }
+  :root.dark .type-badge { background: rgba(79,127,255,.15); }
+
+  .pk-badge {
+    background: rgba(217,119,6,.12);
+    color: var(--warn);
+    font-size: 11px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 4px;
+  }
+  .nullable-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+  .nullable-yes { background: var(--success); }
+  .nullable-no  { background: var(--danger); }
+
+  /* ── SEARCH RESULTS ── */
+  .search-results { flex: 1; overflow: auto; padding: 18px 22px; }
+  .results-header {
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-header strong { color: var(--text); }
+
+  .result-group { margin-bottom: 22px; }
+  .result-group-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 0;
+  }
+  .result-group-title:hover { color: var(--text); }
+  .result-group-title .rg-arrow {
+    font-size: 11px;
+    transition: transform .15s;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+  .result-group-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .result-group.collapsed .rg-arrow { transform: rotate(-90deg); }
+  .result-group.collapsed .result-group-body { display: none; }
+
+  .result-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .1s;
+    margin-bottom: 3px;
+  }
+  .result-item:hover { background: var(--surface); }
+  .result-item .ri-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .result-item .ri-main { flex: 1; min-width: 0; }
+  .result-item .ri-name { font-family: var(--mono); font-size: 16px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .result-item .ri-path { font-size: 13px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+  .result-item .ri-ctx  { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  mark { background: var(--mark-bg); color: var(--mark-color); border-radius: 2px; padding: 0 2px; }
+
+  /* ── STAT CARDS ── */
+  .stats-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; min-width: 110px; }
+  .stat-card .sc-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .stat-card .sc-val { font-size: 24px; font-weight: 700; font-family: var(--mono); color: var(--text); margin-top: 2px; }
+
+  /* ── STATUS BAR ── */
+  .statusbar {
+    height: 28px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    gap: 18px;
+    font-size: 13px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .statusbar .sb-item { display: flex; align-items: center; gap: 5px; }
+  .statusbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .statusbar .dot.green { background: var(--success); }
+
+  /* ── MISC ── */
+  .no-data { color: var(--muted); font-size: 15px; padding: 22px 0; }
+  .comment-cell { max-width: 420px; white-space: normal; word-break: break-word; font-family: var(--sans); font-size: 15px; color: var(--muted); }
+  .tag-idx { background: rgba(124,58,237,.1); color: var(--accent2); }
+  .tag-fk  { background: rgba(22,163,74,.1);  color: var(--success); }
+  .tag-pk  { background: rgba(217,119,6,.1);  color: var(--warn); }
+  :root.dark .tag-idx { background: rgba(124,90,245,.15); }
+  :root.dark .tag-fk  { background: rgba(46,207,138,.15); }
+  :root.dark .tag-pk  { background: rgba(245,166,35,.15); }
+
+  .resizer { width: 4px; background: transparent; cursor: col-resize; transition: background .15s; }
+  .resizer:hover, .resizer.resizing { background: var(--accent); }
+
+  .loading { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 40px; color: var(--muted); font-size: 16px; }
+  .spin { width: 22px; height: 22px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── SQL HINT BOX ── */
+  .sql-hint-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex: 1;
+  }
+  .sql-hint-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sql-hint-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+  .sql-dl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: var(--sans);
+    transition: opacity .15s, transform .1s;
+    margin-bottom: 18px;
+    width: 100%;
+    justify-content: center;
+    letter-spacing: .01em;
+  }
+  .sql-dl-btn:hover { opacity: .87; transform: translateY(-1px); }
+  .sql-dl-btn:active { transform: translateY(0); }
+  .sql-steps { display: flex; flex-direction: column; gap: 9px; }
+  .sql-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+  .sql-step em { font-style: normal; color: var(--accent); font-family: var(--mono); font-size: 13px; }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  /* ── LOADING OVERLAY ── */
+  #loadingOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .loading-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 40px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.25);
+    min-width: 320px;
+  }
+  .loading-spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  /* ── LOG MODAL ── */
+  #logModal {
+    position: fixed;
+    inset: 0;
+    z-index: 1100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .log-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.4);
+  }
+  .log-box {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: min(860px, 92vw);
+    height: 70vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 12px 48px rgba(0,0,0,.3);
+    overflow: hidden;
+  }
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    flex-shrink: 0;
+    background: var(--surface2);
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .log-filters {
+    display: flex;
+    gap: 5px;
+    flex: 1;
+  }
+  .log-filter-btn {
+    padding: 4px 11px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .12s;
+    font-family: var(--sans);
+    white-space: nowrap;
+  }
+  .log-filter-btn.active { color: #fff; border-color: transparent; }
+  .log-filter-btn[data-filter="all"].active    { background: var(--muted); }
+  .log-filter-btn[data-filter="ok"].active     { background: var(--success); }
+  .log-filter-btn[data-filter="info"].active   { background: var(--accent); }
+  .log-filter-btn[data-filter="warn"].active   { background: var(--warn); }
+  .log-filter-btn[data-filter="error"].active  { background: var(--danger); }
+  .log-filter-btn .badge {
+    display: inline-block;
+    background: rgba(255,255,255,.25);
+    border-radius: 8px;
+    padding: 0 5px;
+    font-size: 11px;
+    margin-left: 3px;
+  }
+  .log-entry.hidden { display: none; }
+  .log-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  .log-body::-webkit-scrollbar { width: 5px; }
+  .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .log-entry { display: flex; gap: 10px; border-bottom: 1px solid var(--border); padding: 4px 0; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-time { color: var(--muted); flex-shrink: 0; min-width: 70px; }
+  .log-level { flex-shrink: 0; min-width: 52px; font-weight: 700; }
+  .log-level.info  { color: var(--accent); }
+  .log-level.ok    { color: var(--success); }
+  .log-level.warn  { color: var(--warn); }
+  .log-level.error { color: var(--danger); }
+  .log-msg { color: var(--text); word-break: break-all; }
+
+  /* log button in topbar */
+  .log-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: all .15s;
+    font-family: var(--sans);
+    position: relative;
+  }
+  .log-btn:hover { border-color: var(--accent); color: var(--text); }
+  .log-btn .err-badge {
+    position: absolute;
+    top: -4px; right: -4px;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--danger);
+    display: none;
+  }
+  .log-btn.has-errors .err-badge { display: block; }
+  /* ── HTML ALERT (zamiast window.alert) ── */
+  #htmlAlert {
+    position: fixed;
+    bottom: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    min-width: 340px;
+    max-width: min(560px, 92vw);
+  }
+  .html-alert-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-family: var(--sans);
+    box-shadow: 0 6px 32px rgba(0,0,0,.22);
+    animation: slideUp .18s ease;
+  }
+  @keyframes slideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+  .html-alert-inner.error { background: #fef2f2; border: 1.5px solid #fca5a5; color: #991b1b; }
+  .html-alert-inner.warn  { background: #fffbeb; border: 1.5px solid #fcd34d; color: #92400e; }
+  .html-alert-inner.info  { background: #eff6ff; border: 1.5px solid #93c5fd; color: #1e40af; }
+  :root.dark .html-alert-inner.error { background: #3b0a0a; border-color: #f55a5a; color: #fca5a5; }
+  :root.dark .html-alert-inner.warn  { background: #2d1a00; border-color: #f5a623; color: #fcd34d; }
+  :root.dark .html-alert-inner.info  { background: #0d1f40; border-color: #4f7fff; color: #93c5fd; }
+  .alert-ok-btn {
+    background: currentColor;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+    font-family: var(--sans);
+    opacity: 1;
+    filter: brightness(1.1);
+  }
+  .html-alert-inner.error .alert-ok-btn { background: #dc2626; color:#fff; }
+  .html-alert-inner.warn  .alert-ok-btn { background: #d97706; color:#fff; }
+  .html-alert-inner.info  .alert-ok-btn { background: #2563eb; color:#fff; }
+  .alert-ok-btn:hover { filter: brightness(.9); }
+  /* ── PROPS TAB ── */
+  .props-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .props-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .props-section-title {
+    background: var(--surface2);
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .props-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .props-table tr { border-bottom: 1px solid var(--border); }
+  .props-table tr:last-child { border-bottom: none; }
+  .props-table tr:hover { background: var(--surface2); }
+  .prop-label {
+    padding: 7px 14px;
+    color: var(--muted);
+    white-space: nowrap;
+    font-size: 13px;
+    width: 48%;
+  }
+  .prop-value {
+    padding: 7px 14px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  /* ── SOURCE CODE VIEW ── */
+  .src-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  .src-table tbody tr:hover { background: var(--surface2); }
+  .src-lineno {
+    user-select: none;
+    text-align: right;
+    padding: 0 4px;
+    color: var(--muted);
+    border-right: 1px solid var(--border);
+    white-space: pre;
+    width: calc(7ch + 8px);
+    min-width: calc(7ch + 8px);
+    max-width: calc(7ch + 8px);
+    vertical-align: top;
+    font-size: 12px;
+    opacity: .6;
+  }
+  .src-code {
+    padding: 0 10px;
+    white-space: pre;
+    color: var(--text);
+    vertical-align: top;
+  }
+  /* ── RELATIONS TAB ── */
+  .rel-section { margin-bottom: 24px; }
+  .rel-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    color: var(--muted);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rel-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .rel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+  .rel-arrow {
+    font-size: 18px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+  .rel-table {
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--accent);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .rel-table:hover { color: var(--accent2); }
+  .rel-fk-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+  .rel-cols {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    flex-wrap: wrap;
+  }
+  .rel-col-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .rel-col-label {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .rel-col-vals {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+  }
+  .rel-join-sym {
+    font-size: 16px;
+    color: var(--muted);
+  }
+  .rel-sql-wrap {
+    border-top: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+  .rel-sql-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .rel-sql {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 0;
+    line-height: 1.6;
+  }
+  .rel-copy-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--muted);
+    font-family: var(--sans);
+    transition: all .12s;
+  }
+  .rel-copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">DB<span>⬡</span>Browser</div>
+  <div class="search-wrap">
+    <input type="text" id="searchInput" placeholder="Szukaj: tabela, kolumna, indeks, właściciel…" />
+    <span class="search-icon">⌕</span>
+    <button class="search-clear" id="searchClear" title="Wyczyść wyszukiwanie" onclick="clearSearch()">✕</button>
+  </div>
+  <div class="search-scope">
+    <button class="scope-btn active" data-scope="all">Wszystko</button>
+    <button class="scope-btn" data-scope="tables">Tabele</button>
+    <button class="scope-btn" data-scope="views">Widoki</button>
+    <button class="scope-btn" data-scope="columns">Kolumny</button>
+    <button class="scope-btn" data-scope="indexes">Indeksy</button>
+  </div>
+  <button class="theme-btn" id="themeBtn" title="Przełącz motyw">🌙</button>
+  <button class="upload-btn" onclick="document.getElementById('fileInput').click()">＋ Wczytaj dane</button>
+  <button class="clear-btn hidden" id="clearBtn" title="Usuń dane z pamięci">🗑 Wyczyść</button>
+  <button class="log-btn" id="logBtn" onclick="openLog()" title="Log wczytywania">📋 Log<span class="err-badge"></span></button>
+  <input type="file" id="fileInput" accept=".xlsx,.zip" multiple />
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <span>Schemat</span>
+      <span style="font-size:13px;color:var(--muted)" id="sidebarCount"></span>
+    </div>
+    <div class="tree" id="tree">
+      <div style="padding:20px 14px; color:var(--muted); font-size:15px;">Wczytaj plik XLSX lub ZIP.</div>
+    </div>
+  </div>
+
+  <div class="resizer" id="resizer"></div>
+
+  <div class="content" id="contentArea">
+
+    <!-- EMPTY STATE -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-hero">
+        <span class="big-icon">🗄️</span>
+        <div>
+          <h2>Oracle Schema Browser</h2>
+          <div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:3px">v2025.06.24</div>
+        </div>
+      </div>
+      <p>Wczytaj eksport bazy Oracle w formacie XLSX lub ZIP — dane zostaną zapamiętane w przeglądarce. Nie masz jeszcze pliku? Pobierz skrypty SQL po prawej.</p>
+
+      <div class="idb-banner" id="idbBanner">
+        💾 <span id="idbBannerText"></span>
+        <button onclick="loadFromStorage()">Wczytaj z pamięci</button>
+        <button onclick="document.getElementById('idbBanner').style.display='none'" style="background:var(--surface2);color:var(--muted);border:1px solid var(--border)">Pomiń</button>
+      </div>
+
+      <div class="start-cards">
+
+        <!-- LEWA: wczytywanie pliku -->
+        <div class="start-card">
+          <div class="start-card-title">📂 Wczytaj dane</div>
+          <div class="drop-zone" id="dropZone">
+            <span style="font-size:30px">📁</span>
+            <p style="font-size:14px; color:var(--muted); text-align:center; margin:0">Przeciągnij plik tutaj lub</p>
+            <button class="btn" onclick="document.getElementById('fileInput').click()">Wybierz plik XLSX / ZIP</button>
+            <div class="format-tags">
+              <span class="tag">.xlsx</span>
+              <span class="tag">.zip</span>
+              <span class="tag">wiele plików</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PRAWA: skrypty SQL -->
+        <div class="start-card">
+          <div class="start-card-title">🛠 Jak uzyskać dane z bazy Oracle?</div>
+          <div class="sql-hint-box">
+            <div class="sql-hint-desc">Pobierz gotowe skrypty SQL, uruchom je w SQL Developer lub SQL*Plus, wyeksportuj wyniki do plików XLSX i wczytaj po lewej.</div>
+            <button class="sql-dl-btn" onclick="downloadSqlZip()">&#11015; Pobierz skrypty SQL (ZIP)</button>
+            <div class="sql-steps">
+              <div class="sql-step"><span class="step-num">1</span><span>Pobierz i rozpakuj ZIP ze skryptami</span></div>
+              <div class="sql-step"><span class="step-num">2</span><span>Uruchom każdy skrypt w SQL Developer &rarr; <em>Export &rarr; Excel (.xlsx)</em></span></div>
+              <div class="sql-step"><span class="step-num">3</span><span>Spakuj pliki XLSX do ZIP i wczytaj po lewej</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SEARCH RESULTS -->
+    <div id="searchResultsPanel" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
+      <div class="search-results" id="searchResultsContent"></div>
+    </div>
+
+    <!-- TABLE DETAIL -->
+    <div class="detail" id="detailPanel" style="display:none;">
+      <div class="detail-header">
+        <div class="breadcrumb">
+          <span id="detailBackBtn" style="display:none;cursor:pointer;color:var(--accent);margin-right:8px" onclick="backToSearch()">← Wyniki</span>
+          <span id="detailOwner"></span><span class="sep">›</span><span id="detailTableName" style="color:var(--text)"></span>
+        </div>
+        <div class="detail-title" id="detailTitle"></div>
+        <div class="detail-meta" id="detailMeta"></div>
+      </div>
+      <div class="tabs" id="tabsBar"></div>
+      <div class="tab-content" id="tabContent"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="statusbar">
+  <div class="sb-item">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Brak danych</span>
+  </div>
+  <div class="sb-item" id="statusStats"></div>
+  <div class="sb-item" id="idbStatus"></div>
+  <div class="sb-item" id="errorStatus" style="display:none; color:var(--danger)">
+    <div class="dot" style="background:var(--danger); flex-shrink:0"></div>
+    <span>Błędy — <span style="text-decoration:underline;cursor:pointer" onclick="openLog()">zobacz log</span></span>
+  </div>
+  <div style="flex:1"></div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" style="display:none">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <div>
+      <div id="loadingTitle" style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">Wczytywanie danych…</div>
+      <div id="loadingDetail" style="font-size:13px;color:var(--muted)">Proszę czekać</div>
+    </div>
+  </div>
+</div>
+
+<!-- LOG MODAL -->
+<div id="logModal" style="display:none">
+  <div class="log-backdrop" onclick="closeLog()"></div>
+  <div class="log-box">
+    <div class="log-header">
+      <span style="white-space:nowrap">📋 Log</span>
+      <div class="log-filters" id="logFilters">
+        <button class="log-filter-btn active" data-filter="all" onclick="setLogFilter('all')">Wszystko</button>
+        <button class="log-filter-btn" data-filter="ok"    onclick="setLogFilter('ok')">OK</button>
+        <button class="log-filter-btn" data-filter="info"  onclick="setLogFilter('info')">Info</button>
+        <button class="log-filter-btn" data-filter="warn"  onclick="setLogFilter('warn')">Warn <span class="badge" id="logWarnCount"></span></button>
+        <button class="log-filter-btn" data-filter="error" onclick="setLogFilter('error')">Error <span class="badge" id="logErrorCount"></span></button>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button onclick="clearLog()" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;color:var(--muted)">Wyczyść</button>
+        <button onclick="closeLog()" style="background:var(--accent);border:none;border-radius:6px;padding:4px 12px;font-size:13px;cursor:pointer;color:#fff">Zamknij</button>
+      </div>
+    </div>
+    <div class="log-body" id="logBody"></div>
+  </div>
+</div>
+
+<!-- HTML ALERT -->
+<div id="htmlAlert" style="display:none"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// THEME — apply before render to avoid flash
+// ══════════════════════════════════════════════════════
+(function() {
+  const saved = localStorage.getItem('dbBrowserTheme');
+  // default = light; only add .dark class if explicitly dark
+  if (saved === 'dark') document.documentElement.classList.add('dark');
+})();
+
+// ══════════════════════════════════════════════════════
+// HELPERS — muszą być pierwsze, używane przez log()
+// ══════════════════════════════════════════════════════
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function hl(text, q) {
+  if (!q) return escHtml(text);
+  return escHtml(text).replace(new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'),'<mark>$1</mark>');
+}
+function setStatus(msg, ok) {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('statusDot').className = 'dot'+(ok?' green':'');
+}
+
+// HTML alert zamiast window.alert()
+function showAlert(msg, type) {
+  const el = document.getElementById('htmlAlert');
+  const icon = type === 'error' ? '❌' : type === 'warn' ? '⚠️' : 'ℹ️';
+  const close = () => { el.style.display = 'none'; };
+  el.innerHTML = `
+    <div class="html-alert-inner ${type||'info'}">
+      <span style="font-size:18px;flex-shrink:0">${icon}</span>
+      <span style="flex:1;line-height:1.5">${escHtml(msg)}</span>
+      <button class="alert-ok-btn" id="alertOkBtn">OK</button>
+    </div>`;
+  el.style.display = 'block';
+  el.querySelector('#alertOkBtn').addEventListener('click', close);
+}
+
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+const db = { owners: {}, sheets: {}, loaded: false };
+let currentTable = null, currentOwner = null;
+let searchScope = 'all', searchTimeout = null;
+
+// ══════════════════════════════════════════════════════
+// STORAGE LAYER
+// Próbuje IndexedDB → sessionStorage → brak zapisu
+// Działa zarówno z http:// jak i z file:// (Chrome/Edge)
+// ══════════════════════════════════════════════════════
+const IDB_NAME = 'DBBrowser', IDB_STORE = 'sheets', IDB_KEY = 'data';
+const SS_KEY   = 'dbBrowserData';   // sessionStorage fallback
+let   storageMode = 'none';         // 'idb' | 'session' | 'none'
+
+// ── Sprawdź dostępność IDB ──
+async function probeIDB() {
+  return new Promise(res => {
+    try {
+      const req = indexedDB.open('__probe__', 1);
+      req.onsuccess = e => { e.target.result.close(); indexedDB.deleteDatabase('__probe__'); res(true); };
+      req.onerror   = () => res(false);
+      req.onblocked = () => res(false);
+      setTimeout(() => res(false), 1500); // timeout na wypadek braku odpowiedzi
+    } catch(e) { res(false); }
+  });
+}
+
+async function initStorage() {
+  const idbOk = await probeIDB();
+  if (idbOk) {
+    storageMode = 'idb';
+    log('info', 'Pamięć: IndexedDB (dane przetrwają zamknięcie karty)');
+    // Upewnij się że store istnieje
+    await new Promise((res, rej) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(IDB_STORE);
+      req.onsuccess = e => { e.target.result.close(); res(); };
+      req.onerror   = rej;
+    }).catch(() => { storageMode = 'session'; });
+  }
+  if (storageMode !== 'idb') {
+    try {
+      sessionStorage.setItem('__test__', '1');
+      sessionStorage.removeItem('__test__');
+      storageMode = 'session';
+      log('warn', 'IndexedDB niedostępne na file:// — używam sessionStorage (dane znikną po zamknięciu karty)');
+    } catch(e) {
+      storageMode = 'none';
+      log('warn', 'Brak dostępu do pamięci przeglądarki — dane nie będą zapisane między sesjami');
+    }
+  }
+  updateStorageStatus();
+}
+
+function updateStorageStatus() {
+  const el = document.getElementById('idbStatus');
+  if (storageMode === 'idb')      el.textContent = '💾 IndexedDB';
+  else if (storageMode === 'session') el.textContent = '⚡ Session (file://)';
+  else                                el.textContent = '⚠️ Brak zapisu';
+}
+
+// ── Zapis ──
+async function saveToStorage(sheetsData, meta) {
+  const payload = JSON.stringify({ sheets: sheetsData, meta, savedAt: new Date().toISOString() });
+  if (storageMode === 'idb') {
+    try {
+      await new Promise((res, rej) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onsuccess = e => {
+          const db2 = e.target.result;
+          const tx = db2.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).put(JSON.parse(payload), IDB_KEY);
+          tx.oncomplete = () => { db2.close(); res(); };
+          tx.onerror    = rej;
+        };
+        req.onerror = rej;
+      });
+      log('ok', 'Dane zapisane w IndexedDB');
+      document.getElementById('idbStatus').textContent = '💾 Zapisano w IndexedDB';
+    } catch(e) {
+      log('warn', `Błąd zapisu IDB: ${e.message} — próbuję sessionStorage`);
+      trySaveSession(payload);
+    }
+  } else if (storageMode === 'session') {
+    trySaveSession(payload);
+  }
+}
+
+function trySaveSession(payload) {
+  try {
+    sessionStorage.setItem(SS_KEY, payload);
+    log('ok', 'Dane zapisane w sessionStorage');
+    document.getElementById('idbStatus').textContent = '⚡ Zapisano (sesja)';
+  } catch(e) {
+    log('warn', `Dane za duże dla sessionStorage (${(payload.length/1024/1024).toFixed(1)} MB) — nie zapisano`);
+    document.getElementById('idbStatus').textContent = '⚠️ Za duże do zapisu';
+  }
+}
+
+// ── Odczyt ──
+async function readFromStorage() {
+  if (storageMode === 'idb') {
+    try {
+      return await new Promise((res, rej) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onsuccess = e => {
+          const db2 = e.target.result;
+          const tx = db2.transaction(IDB_STORE, 'readonly');
+          const get = tx.objectStore(IDB_STORE).get(IDB_KEY);
+          get.onsuccess = ev => { db2.close(); res(ev.target.result || null); };
+          get.onerror   = rej;
+        };
+        req.onerror = rej;
+      });
+    } catch(e) { return null; }
+  } else if (storageMode === 'session') {
+    try {
+      const raw = sessionStorage.getItem(SS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch(e) { return null; }
+  }
+  return null;
+}
+
+// ── Kasowanie ──
+async function clearStorage() {
+  if (storageMode === 'idb') {
+    try {
+      await new Promise((res, rej) => {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onsuccess = e => {
+          const db2 = e.target.result;
+          const tx = db2.transaction(IDB_STORE, 'readwrite');
+          tx.objectStore(IDB_STORE).delete(IDB_KEY);
+          tx.oncomplete = () => { db2.close(); res(); };
+          tx.onerror = rej;
+        };
+        req.onerror = rej;
+      });
+    } catch(e) {}
+  } else if (storageMode === 'session') {
+    try { sessionStorage.removeItem(SS_KEY); } catch(e) {}
+  }
+}
+
+// ── Sprawdź przy starcie ──
+async function checkStorageOnLoad() {
+  await initStorage();
+  const saved = await readFromStorage();
+  if (!saved) return;
+  const d = new Date(saved.savedAt);
+  const when = d.toLocaleDateString('pl-PL') + ' ' + d.toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit'});
+  const modeLabel = storageMode === 'session' ? ' [sesja]' : '';
+  document.getElementById('idbBannerText').textContent =
+    `Znaleziono zapisane dane (${saved.meta || ''}${modeLabel}) z ${when}.`;
+  document.getElementById('idbBanner').style.display = 'flex';
+}
+
+async function loadFromStorage() {
+  document.getElementById('idbBanner').style.display = 'none';
+  showLoading('Wczytywanie z pamięci…', 'Odtwarzanie danych');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const saved = await readFromStorage();
+    if (!saved) { hideLoading(); log('warn', 'Brak zapisanych danych'); return; }
+    log('info', `Wczytywanie z ${storageMode} (zapisano: ${saved.savedAt})`);
+    db.sheets = saved.sheets;
+    db.owners = {};
+    setLoadingDetail('Budowanie modelu…');
+    await new Promise(r => setTimeout(r, 10));
+    buildModel();
+    hideLoading();
+    afterLoad(storageMode === 'session' ? 'sessionStorage' : 'IndexedDB');
+  } catch(e) {
+    hideLoading();
+    log('error', `Błąd wczytywania: ${e.message}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// LOG SYSTEM
+// ══════════════════════════════════════════════════════
+const appLog = [];
+let hasErrors = false;
+let logFilter = 'all';
+
+function log(level, msg) {
+  const now = new Date();
+  const time = now.toLocaleTimeString('pl-PL', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  appLog.push({ time, level, msg });
+  console[level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'log'](`[${level.toUpperCase()}] ${msg}`);
+  if (level === 'error' || level === 'warn') {
+    hasErrors = true;
+    document.getElementById('logBtn').classList.add('has-errors');
+    document.getElementById('errorStatus').style.display = 'flex';
+  }
+  updateLogCounts();
+  if (document.getElementById('logModal').style.display !== 'none') renderLog();
+}
+
+function updateLogCounts() {
+  const warn  = appLog.filter(e => e.level === 'warn').length;
+  const error = appLog.filter(e => e.level === 'error').length;
+  const wEl = document.getElementById('logWarnCount');
+  const eEl = document.getElementById('logErrorCount');
+  if (wEl) wEl.textContent = warn  > 0 ? warn  : '';
+  if (eEl) eEl.textContent = error > 0 ? error : '';
+}
+
+function renderLog() {
+  const body = document.getElementById('logBody');
+  if (!appLog.length) {
+    body.innerHTML = '<div style="color:var(--muted);padding:8px 0">Brak wpisów.</div>';
+    return;
+  }
+  body.innerHTML = appLog.slice().reverse().map(e =>
+    `<div class="log-entry" data-level="${e.level}">
+      <span class="log-time">${e.time}</span>
+      <span class="log-level ${e.level}">${e.level.toUpperCase()}</span>
+      <span class="log-msg">${escHtml(e.msg)}</span>
+    </div>`
+  ).join('');
+  applyLogFilter();
+}
+
+function setLogFilter(filter) {
+  logFilter = filter;
+  document.querySelectorAll('.log-filter-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.filter === filter);
+  });
+  applyLogFilter();
+}
+
+function applyLogFilter() {
+  document.querySelectorAll('#logBody .log-entry').forEach(el => {
+    const show = logFilter === 'all' || el.dataset.level === logFilter;
+    el.classList.toggle('hidden', !show);
+  });
+}
+
+function openLog() {
+  document.getElementById('logModal').style.display = 'flex';
+  updateLogCounts();
+  renderLog();
+}
+function closeLog() { document.getElementById('logModal').style.display = 'none'; }
+function clearLog() {
+  appLog.length = 0; hasErrors = false; logFilter = 'all';
+  document.getElementById('logBtn').classList.remove('has-errors');
+  document.getElementById('errorStatus').style.display = 'none';
+  document.querySelectorAll('.log-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+  updateLogCounts();
+  renderLog();
+}
+
+// ══════════════════════════════════════════════════════
+// LOADING OVERLAY
+// ══════════════════════════════════════════════════════
+function showLoading(title, detail) {
+  document.getElementById('loadingTitle').textContent = title || 'Wczytywanie…';
+  document.getElementById('loadingDetail').textContent = detail || 'Proszę czekać';
+  document.getElementById('loadingOverlay').style.display = 'flex';
+}
+function setLoadingDetail(detail) {
+  document.getElementById('loadingDetail').textContent = detail;
+}
+function hideLoading() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════
+// FILE HANDLING
+// ══════════════════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', e => {
+  if (!e.target.files || e.target.files.length === 0) {
+    if (!db.loaded) goToUploadScreen();
+    return;
+  }
+  handleFiles(e.target.files);
+  e.target.value = '';
+});
+
+// Wykryj anulowanie file pickera przez window focus
+document.getElementById('fileInput').addEventListener('click', () => {
+  if (!db.loaded) {
+    window.addEventListener('focus', function onFocus() {
+      window.removeEventListener('focus', onFocus);
+      // Poczekaj chwilę — jeśli 'change' nie odpali, użytkownik anulował
+      setTimeout(() => {
+        if (!db.loaded) goToUploadScreen();
+      }, 400);
+    }, { once: true });
+  }
+});
+
+document.body.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('dropZone').classList.add('dragging'); });
+document.body.addEventListener('dragleave', () => document.getElementById('dropZone').classList.remove('dragging'));
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('dropZone').classList.remove('dragging');
+  handleFiles(e.dataTransfer.files);
+});
+
+async function handleFiles(files) {
+  // WAŻNE: Chrome/Edge unieważnia FileList po oddaniu kontroli (setTimeout/await).
+  // Dlatego najpierw kopiujemy referencje do zwykłej tablicy — synchronicznie.
+  const filesCopy = Array.from(files).map(f => ({ file: f, name: f.name, size: f.size }));
+
+  showLoading('Wczytywanie plików…', 'Analizowanie zawartości');
+  log('info', `Rozpoczęto wczytywanie: ${filesCopy.length} plik(ów)`);
+
+  try {
+    const xlsxFiles = [];
+
+    for (const { file, name, size } of filesCopy) {
+      if (name.endsWith('.zip')) {
+        setLoadingDetail(`Rozpakowywanie: ${name}`);
+        log('info', `Rozpakowywanie ZIP: ${name} (${(size/1024).toFixed(0)} KB)`);
+        const buf = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        for (const [entryName, entry] of Object.entries(zip.files)) {
+          if (entryName.endsWith('.xlsx') && !entryName.startsWith('__MACOSX')) {
+            const ab = await entry.async('arraybuffer');
+            xlsxFiles.push({ name: entryName, data: ab });
+            log('info', `  Znaleziono w ZIP: ${entryName}`);
+          }
+        }
+      } else if (name.endsWith('.xlsx')) {
+        const ab = await file.arrayBuffer();
+        xlsxFiles.push({ name, data: ab });
+        log('info', `Plik XLSX: ${name} (${(size/1024).toFixed(0)} KB)`);
+      } else {
+        log('warn', `Pominięto nieobsługiwany plik: ${name}`);
+      }
+    }
+
+    if (!xlsxFiles.length) {
+      hideLoading();
+      log('error', 'Nie znaleziono żadnych plików XLSX!');
+      showAlert('Nie znaleziono żadnych plików XLSX w wybranym pliku lub folderze.', 'error');
+      return;
+    }
+
+    db.owners = {}; db.sheets = {};
+
+    for (const { name, data } of xlsxFiles) {
+      setLoadingDetail(`Parsowanie: ${name}`);
+      parseXlsx(name, data);
+    }
+
+    setLoadingDetail('Budowanie modelu danych…');
+    buildModel();
+
+    const owners = Object.keys(db.owners).length;
+    const tables = Object.values(db.owners).reduce((s,o) => s + Object.keys(o.tables).length, 0);
+    const meta = `${owners} właścicieli · ${tables} tabel`;
+
+    setLoadingDetail('Zapisywanie do pamięci przeglądarki…');
+    await saveToStorage(db.sheets, meta);
+
+    hideLoading();
+    afterLoad(xlsxFiles.map(f => f.name).join(', '));
+    log('ok', `Załadowano pomyślnie: ${owners} właścicieli, ${tables} tabel`);
+
+  } catch(e) {
+    hideLoading();
+    log('error', `Błąd podczas wczytywania: ${e.message}`);
+    showAlert(`Błąd wczytywania: ${e.message}`, 'error');
+    console.error(e);
+  }
+}
+
+function afterLoad(source) {
+  db.loaded = true;
+  renderTree();
+  const owners = Object.keys(db.owners).length;
+  const tables = Object.values(db.owners).reduce((s,o)=>s+Object.keys(o.tables).length,0);
+
+  // count indexes and columns for log
+  let totalCols = 0, totalIdx = 0, totalCons = 0;
+  for (const o of Object.values(db.owners))
+    for (const t of Object.values(o.tables)) {
+      totalCols += t.columns.length;
+      totalIdx  += t.indexes.length;
+      totalCons += t.constraints.length;
+    }
+  log('ok', `Model: ${owners} ownerów, ${tables} tabel, ${totalCols} kolumn, ${totalIdx} indeksów, ${totalCons} ograniczeń`);
+
+  setStatus(`Dane załadowane`, true);
+  document.getElementById('statusStats').textContent = `${owners} właścicieli · ${tables} tabel`;
+  document.getElementById('sidebarCount').textContent = `${owners} / ${tables}`;
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('idbBanner').style.display = 'none';
+  document.getElementById('clearBtn').classList.remove('hidden');
+}
+
+document.getElementById('clearBtn').addEventListener('click', async () => {
+  if (!window.confirm('Usunąć wczytane dane z pamięci przeglądarki?')) return;
+  await clearStorage();
+  db.owners = {}; db.sheets = {}; db.loaded = false;
+  currentTable = null; currentOwner = null;
+  document.getElementById('tree').innerHTML = '<div style="padding:20px 14px;color:var(--muted);font-size:15px">Wczytaj plik XLSX lub ZIP.</div>';
+  document.getElementById('sidebarCount').textContent = '';
+  document.getElementById('statusStats').textContent = '';
+  document.getElementById('idbStatus').textContent = '';
+  document.getElementById('clearBtn').classList.add('hidden');
+  document.getElementById('detailPanel').style.display = 'none';
+  document.getElementById('searchResultsPanel').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'flex';
+  log('info', 'Dane wyczyszczone z pamięci przeglądarki');
+  setStatus('Dane wyczyszczone', false);
+});
+
+// ══════════════════════════════════════════════════════
+// XLSX PARSER — detects sheet type by column signatures
+// ══════════════════════════════════════════════════════
+
+// Known Oracle export signatures: map canonical key → required columns (any match)
+const SHEET_SIGNATURES = [
+  { key: 'ALL_TAB_COLUMNS',  cols: ['COLUMN_NAME','COLUMN_ID','DATA_TYPE','NULLABLE'] },
+  { key: 'ALL_IND_COLUMNS',  cols: ['INDEX_NAME','COLUMN_NAME','COLUMN_POSITION','DESCEND'] },
+  { key: 'ALL_INDEXES',      cols: ['INDEX_NAME','UNIQUENESS','INDEX_TYPE','TABLE_NAME'] },
+  { key: 'ALL_CONSTRAINTS',  cols: ['CONSTRAINT_NAME','CONSTRAINT_TYPE','TABLE_NAME'] },
+  { key: 'ALL_CONS_COLUMNS', cols: ['CONSTRAINT_NAME','COLUMN_NAME','POSITION'] },
+  { key: 'ALL_TAB_COMMENTS', cols: ['TABLE_NAME','TABLE_TYPE','COMMENTS'] },
+  { key: 'ALL_COL_COMMENTS', cols: ['COLUMN_NAME','COMMENTS','TABLE_NAME'] },
+  { key: 'ALL_TABLES',       cols: ['TABLE_NAME','TABLESPACE_NAME','NUM_ROWS','PARTITIONED','STATUS','LAST_ANALYZED'] },
+  { key: 'ALL_VIEWS',        cols: ['VIEW_NAME','TEXT'] },
+  { key: 'ALL_SOURCE',       cols: ['NAME','TYPE','LINE','TEXT'] },
+  { key: 'ALL_SEQUENCES',    cols: ['SEQUENCE_NAME','MIN_VALUE','INCREMENT_BY'] },
+  { key: 'ALL_TRIGGERS',     cols: ['TRIGGER_NAME','TRIGGER_TYPE','TRIGGERING_EVENT'] },
+  { key: 'ALL_SYNONYMS',     cols: ['SYNONYM_NAME','TABLE_OWNER'] },
+];
+
+function detectSheetType(sheetName, rows) {
+  if (!rows || rows.length === 0) return null;
+  const rowCols = Object.keys(rows[0]).map(k => k.toUpperCase().replace(/[_ ]/g,''));
+
+  // Score each signature — ALL_IND_COLUMNS first to avoid confusion with ALL_INDEXES
+  let bestKey = null, bestScore = 0;
+  for (const sig of SHEET_SIGNATURES) {
+    const required = sig.cols.map(c => c.toUpperCase().replace(/[_ ]/g,''));
+    const matches = required.filter(r => rowCols.includes(r)).length;
+    const score = matches / required.length;
+    if (score > bestScore) { bestScore = score; bestKey = sig.key; }
+  }
+  if (bestScore >= 0.6) return bestKey;
+
+  // Fallback: sheet name keywords
+  const sn = sheetName.toUpperCase().replace(/[_ ]/g,'');
+  for (const sig of SHEET_SIGNATURES) {
+    if (sn === sig.key.replace(/[_ ]/g,'')) return sig.key;
+  }
+  if (sn.includes('INDCOL') || sn.includes('INDEXCOL')) return 'ALL_IND_COLUMNS';
+  if (sn.includes('INDEX')) return 'ALL_INDEXES';
+  if (sn.includes('COLUMN')) return 'ALL_TAB_COLUMNS';
+  if (sn === 'ALLTABLES' || sn === 'TABLES') return 'ALL_TABLES';
+  if (sn.includes('CONSTRAINT')) return 'ALL_CONSTRAINTS';
+  if (sn.includes('COMMENT')) return 'ALL_TAB_COMMENTS';
+  if (sn.includes('VIEW')) return 'ALL_VIEWS';
+  if (sn.includes('SOURCE')) return 'ALL_SOURCE';
+  if (sn.includes('TRIGGER')) return 'ALL_TRIGGERS';
+  if (sn.includes('SYNONYM')) return 'ALL_SYNONYMS';
+  if (sn.includes('SEQUENCE')) return 'ALL_SEQUENCES';
+
+  return sheetName.toUpperCase().trim();
+}
+
+function parseXlsx(filename, arrayBuffer) {
+  try {
+    const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+    log('info', `  Plik: ${filename} — arkusze: ${wb.SheetNames.join(', ')}`);
+    for (const sheetName of wb.SheetNames) {
+      // Arkusze z zapytaniem SQL (nagłówek eksportu SQL Developer) — pomiń cicho
+      if (sheetName.toUpperCase().includes('SQL')) continue;
+
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+      if (!rows.length) {
+        log('warn', `    Arkusz "${sheetName}" jest pusty — pominięto`);
+        continue;
+      }
+      const key = detectSheetType(sheetName, rows);
+      if (!key) {
+        log('warn', `    Arkusz "${sheetName}" — nie rozpoznano typu, pominięto`);
+        continue;
+      }
+      if (!db.sheets[key]) db.sheets[key] = [];
+      // Używamy concat zamiast push(...rows) — unikamy stack overflow dla dużych zbiorów
+      db.sheets[key] = db.sheets[key].concat(rows);
+      log('ok', `    Arkusz "${sheetName}" → ${key} (${rows.length} wierszy)`);
+    }
+  } catch(e) {
+    log('error', `Błąd parsowania ${filename}: ${e.message}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// MODEL
+// ══════════════════════════════════════════════════════
+function col(row, ...names) {
+  for (const n of names) {
+    const k = Object.keys(row).find(k => k.toUpperCase().replace(/[_ ]/g,'') === n.toUpperCase().replace(/[_ ]/g,''));
+    if (k !== undefined && row[k] !== '' && row[k] !== null && row[k] !== undefined) return String(row[k]).trim();
+  }
+  return '';
+}
+
+function ensureTable(owner, table, objType) {
+  const o = (owner && owner !== '' ? owner : 'UNKNOWN').toUpperCase();
+  const t = table.toUpperCase();
+  if (!db.owners[o]) db.owners[o] = { tables: {} };
+  if (!db.owners[o].tables[t]) db.owners[o].tables[t] = { owner:o, name:t, objType: objType||'TABLE', columns:[], indexes:[], constraints:[], sources:[], comments:[], tableProps: null, extra:{} };
+  else if (objType && db.owners[o].tables[t].objType === 'TABLE') db.owners[o].tables[t].objType = objType;
+  return db.owners[o].tables[t];
+}
+
+function sheetRows(key) {
+  return db.sheets[key] || [];
+}
+
+function buildModel() {
+  log('info', 'Budowanie modelu — dostępne klucze: ' + Object.keys(db.sheets).join(', '));
+  // ── COLUMNS ──
+  const colRows = sheetRows('ALL_TAB_COLUMNS').concat(sheetRows('ALL_COL_COMMENTS'));
+  for (const row of colRows) {
+    const owner = col(row,'OWNER','SCHEMA','TABLE_OWNER','TABLEOWNER');
+    const table = col(row,'TABLE_NAME','TABLENAME','TABNAME','TABLE');
+    if (!table) continue;
+    // ALL_COL_COMMENTS rows may have no DATA_TYPE — skip if no COLUMN_ID and no DATA_TYPE (pure comment rows handled below)
+    if (!col(row,'COLUMN_ID','COLUMNID','COLNO','POSITION','POS') && !col(row,'DATA_TYPE','DATATYPE','TYPE','COLTYPE')) continue;
+    ensureTable(owner,table).columns.push({
+      pos:       col(row,'COLUMN_ID','COLUMNID','COLNO','POSITION','POS'),
+      name:      col(row,'COLUMN_NAME','COLUMNNAME','COLNAME','NAME','COL'),
+      type:      col(row,'DATA_TYPE','DATATYPE','TYPE','COLTYPE','TYPENAME','COLUMN_TYPE'),
+      length:    col(row,'DATA_LENGTH','DATALENGTH','LENGTH','CHAR_LENGTH','SIZE'),
+      precision: col(row,'DATA_PRECISION','DATAPRECISION','PRECISION','PREC'),
+      scale:     col(row,'DATA_SCALE','DATASCALE','SCALE'),
+      nullable:  col(row,'NULLABLE','NULLS','ISNULLABLE','NULL_OK'),
+      default_:  col(row,'DATA_DEFAULT','DATADEFAULT','DEFAULT','DFLT_VALUE','DEFAULT_VALUE'),
+      comment:   col(row,'COMMENTS','COMMENT','COL_COMMENT','REMARKS','DESCRIPTION'),
+      raw: row,
+    });
+  }
+
+  // ── INDEXES ──
+  // ALL_INDEXES: definicje indeksów (UNIQUENESS, INDEX_TYPE, STATUS)
+  const indexMeta = {}; // klucz: "OWNER||TABLE||INDEX_NAME" -> dane
+  for (const row of sheetRows('ALL_INDEXES')) {
+    const owner = col(row,'TABLE_OWNER','TABLEOWNER','OWNER','SCHEMA','INDEX_OWNER');
+    const table = col(row,'TABLE_NAME','TABLENAME','TABLE');
+    const iname = col(row,'INDEX_NAME','INDEXNAME','IDXNAME','NAME');
+    if (!table || !iname) continue;
+    const k = `${owner}||${table}||${iname}`;
+    indexMeta[k] = {
+      owner, table,
+      type:        col(row,'INDEX_TYPE','INDEXTYPE','TYPE'),
+      uniqueness:  col(row,'UNIQUENESS','UNIQUE','IS_UNIQUE'),
+      status:      col(row,'STATUS','STATE'),
+      partitioned: col(row,'PARTITIONED','IS_PARTITIONED'),
+      raw: row,
+    };
+  }
+
+  // ALL_IND_COLUMNS: kolumny indeksów (osobny plik)
+  // Scalamy z metadanymi z ALL_INDEXES jeśli dostępne
+  const indexCols = {}; // klucz: "OWNER||TABLE||INDEX_NAME" -> [{pos,name,descend}]
+  for (const row of sheetRows('ALL_IND_COLUMNS')) {
+    const owner = col(row,'INDEX_OWNER','TABLE_OWNER','TABLEOWNER','OWNER','SCHEMA');
+    const table = col(row,'TABLE_NAME','TABLENAME','TABLE');
+    const iname = col(row,'INDEX_NAME','INDEXNAME','NAME');
+    if (!table || !iname) continue;
+    const k = `${owner}||${table}||${iname}`;
+    if (!indexCols[k]) indexCols[k] = { owner, table, iname, cols: [] };
+    indexCols[k].cols.push({
+      pos:     col(row,'COLUMN_POSITION','COLUMNPOSITION','COL_POS','POSITION'),
+      name:    col(row,'COLUMN_NAME','COLUMNNAME'),
+      descend: col(row,'DESCEND','DESC'),
+    });
+  }
+
+  // Buduj wpisy indeksów łącząc oba źródła
+  const allIndexKeys = new Set([...Object.keys(indexMeta), ...Object.keys(indexCols)]);
+  for (const k of allIndexKeys) {
+    const meta = indexMeta[k];
+    const colData = indexCols[k];
+    const owner = meta?.owner || colData?.owner || '';
+    const table = meta?.table || colData?.table || '';
+    const iname = meta ? col(meta.raw,'INDEX_NAME','INDEXNAME','IDXNAME','NAME') : colData?.iname || '';
+    if (!table) continue;
+
+    const sortedCols = (colData?.cols || [])
+      .sort((a,b) => (parseInt(a.pos)||0) - (parseInt(b.pos)||0))
+      .map(c => c.name).join(', ');
+
+    ensureTable(owner, table).indexes.push({
+      name:        iname,
+      type:        meta?.type  || '',
+      uniqueness:  meta?.uniqueness || '',
+      columns:     sortedCols,
+      colPos:      '',
+      status:      meta?.status || '',
+      partitioned: meta?.partitioned || '',
+      raw:         meta?.raw || {},
+    });
+  }
+
+  // ── TABLE PROPERTIES (ALL_TABLES) ──
+  for (const row of sheetRows('ALL_TABLES')) {
+    const owner = col(row,'OWNER','SCHEMA');
+    const table = col(row,'TABLE_NAME','TABLENAME','TABLE');
+    if (!table) continue;
+    const tbl = ensureTable(owner, table, 'TABLE');
+    tbl.tableProps = {
+      tablespace:   col(row,'TABLESPACE_NAME','TABLESPACE'),
+      status:       col(row,'STATUS'),
+      partitioned:  col(row,'PARTITIONED'),
+      compression:  col(row,'COMPRESSION'),
+      compress_for: col(row,'COMPRESS_FOR'),
+      row_movement: col(row,'ROW_MOVEMENT'),
+      logging:      col(row,'LOGGING'),
+      cache:        col(row,'CACHE'),
+      monitoring:   col(row,'MONITORING'),
+      read_only:    col(row,'READ_ONLY'),
+      dropped:      col(row,'DROPPED'),
+      num_rows:     col(row,'NUM_ROWS'),
+      blocks:       col(row,'BLOCKS'),
+      avg_row_len:  col(row,'AVG_ROW_LEN'),
+      last_analyzed:col(row,'LAST_ANALYZED'),
+      pct_free:     col(row,'PCT_FREE'),
+      ini_trans:    col(row,'INI_TRANS'),
+      degree:       col(row,'DEGREE'),
+      result_cache: col(row,'RESULT_CACHE'),
+      iot_type:     col(row,'IOT_TYPE'),
+      cluster_name: col(row,'CLUSTER_NAME'),
+      dependencies: col(row,'DEPENDENCIES'),
+      global_stats: col(row,'GLOBAL_STATS'),
+      sample_size:  col(row,'SAMPLE_SIZE'),
+      duration:     col(row,'DURATION'),
+      raw: row,
+    };
+  }
+
+  // ── CONSTRAINTS ──
+  // Każdy wiersz z ALL_CONS_COLUMNS to jedna kolumna constraintu — grupujemy po nazwie
+  const conMap = {}; // klucz: "OWNER||TABLE||CONSTRAINT_NAME" → obiekt constraintu
+  const conRows = sheetRows('ALL_CONSTRAINTS').concat(sheetRows('ALL_CONS_COLUMNS'));
+
+  for (const row of conRows) {
+    const owner  = col(row,'OWNER','SCHEMA','TABLE_OWNER','TABLEOWNER');
+    const table  = col(row,'TABLE_NAME','TABLENAME','TABLE');
+    const cname  = col(row,'CONSTRAINT_NAME','CONSTRAINTNAME','NAME');
+    if (!table || !cname) continue;
+
+    const mapKey = `${owner}||${table}||${cname}`;
+
+    if (!conMap[mapKey]) {
+      conMap[mapKey] = {
+        owner, table,
+        name:     cname,
+        type:     col(row,'CONSTRAINT_TYPE','CONSTRAINTTYPE','TYPE','CON_TYPE'),
+        cols:     [],   // lista { pos, name } — złożymy w order
+        refOwner: col(row,'R_OWNER','REF_OWNER','FK_OWNER'),
+        refTable: col(row,'R_TABLE','REFTABLE','REF_TABLE','FK_TABLE'),
+        refConstraint: col(row,'R_CONSTRAINT_NAME','R_COLUMNS','REF_COLUMNS','FK_COLUMNS'),
+        refCols:  [],   // wypełnimy przy resolveConstraintCols
+        status:   col(row,'STATUS','ENABLED','VALIDATED'),
+        raw: row,
+      };
+    }
+
+    // Dodaj kolumnę (unikaj duplikatów)
+    const colName = col(row,'COLUMN_NAME','COLUMNNAME','COLUMNS','COL_LIST');
+    const colPos  = parseInt(col(row,'COLUMN_POSITION','POSITION','COL_POS') || '0') || 0;
+    if (colName && !conMap[mapKey].cols.find(c => c.name === colName)) {
+      conMap[mapKey].cols.push({ pos: colPos, name: colName });
+    }
+
+    // Nadpisz pola nagłówkowe jeśli jeszcze puste (np. R_TABLE może być tylko w jednym wierszu)
+    if (!conMap[mapKey].refOwner) conMap[mapKey].refOwner = col(row,'R_OWNER','REF_OWNER','FK_OWNER');
+    if (!conMap[mapKey].refTable) conMap[mapKey].refTable = col(row,'R_TABLE','REFTABLE','REF_TABLE','FK_TABLE');
+    if (!conMap[mapKey].refConstraint) conMap[mapKey].refConstraint = col(row,'R_CONSTRAINT_NAME','R_COLUMNS','REF_COLUMNS','FK_COLUMNS');
+  }
+
+  // Zapisz do modelu — kolumny posortowane po pozycji, sklejone przecinkiem
+  for (const [, con] of Object.entries(conMap)) {
+    const sortedCols = con.cols
+      .sort((a, b) => a.pos - b.pos)
+      .map(c => c.name);
+    ensureTable(con.owner, con.table).constraints.push({
+      name:          con.name,
+      type:          con.type,
+      columns:       sortedCols.join(', '),
+      colList:       sortedCols,   // tablica — do JOIN generation
+      refOwner:      con.refOwner,
+      refTable:      con.refTable,
+      refConstraint: con.refConstraint,
+      refCols:       '',           // wypełniane przez resolveConstraintCols
+      status:        con.status,
+      raw:           con.raw,
+    });
+  }
+
+  // ── TABLE COMMENTS ──
+  for (const row of sheetRows('ALL_TAB_COMMENTS')) {
+    const owner = col(row,'OWNER','SCHEMA');
+    const table = col(row,'TABLE_NAME','TABLENAME','TABLE');
+    const ttype = col(row,'TABLE_TYPE','OBJECT_TYPE','TYPE');
+    if (!table) continue;
+    const objT = ttype.toUpperCase() === 'VIEW' ? 'VIEW' : ttype ? ttype.toUpperCase() : undefined;
+    ensureTable(owner, table, objT).comments.push({ comment: col(row,'COMMENTS','COMMENT','REMARKS','DESCRIPTION'), raw: row });
+  }
+
+  // ── VIEWS ──
+  for (const row of sheetRows('ALL_VIEWS')) {
+    const owner = col(row,'OWNER','SCHEMA');
+    const name  = col(row,'VIEW_NAME','NAME','OBJECT_NAME');
+    if (!name) continue;
+    ensureTable(owner, name, 'VIEW').sources.push({
+      type: 'VIEW',
+      text: col(row,'TEXT','SOURCE','DEFINITION','VIEWTEXT','VIEW_TEXT'),
+      line: '', raw: row,
+    });
+  }
+
+  // ── SOURCE — procedury, funkcje, pakiety (ALL_SOURCE — wiele linii na obiekt) ──
+  for (const row of sheetRows('ALL_SOURCE')) {
+    const owner = col(row,'OWNER','SCHEMA');
+    const name  = col(row,'NAME','OBJECT_NAME');
+    const srcType = col(row,'TYPE','OBJECT_TYPE','SOURCE_TYPE') || 'SOURCE';
+    if (!name) continue;
+    const objT = srcType.includes('TRIGGER')   ? 'TRIGGER'
+               : srcType.includes('PACKAGE')   ? 'PACKAGE'
+               : srcType.includes('FUNCTION')  ? 'FUNCTION'
+               : srcType.includes('PROCEDURE') ? 'PROCEDURE'
+               : 'SOURCE';
+    ensureTable(owner, name, objT).sources.push({
+      type: srcType,
+      text: col(row,'TEXT','SOURCE','SOURCE_CODE'),
+      line: col(row,'LINE','LINENO'),
+      raw: row,
+    });
+  }
+
+  // ── TRIGGERS — ALL_TRIGGERS: jeden rekord = cały trigger jako blok ──
+  // Dodajemy tylko jeśli obiekt nie ma już źródła z ALL_SOURCE
+  for (const row of sheetRows('ALL_TRIGGERS')) {
+    const owner   = col(row,'OWNER','SCHEMA','TABLE_OWNER');
+    const name    = col(row,'TRIGGER_NAME','NAME','OBJECT_NAME');
+    const body    = col(row,'TRIGGER_BODY','TEXT','SOURCE','SOURCE_CODE');
+    const trgType = col(row,'TRIGGER_TYPE','TYPE') || 'TRIGGER';
+    if (!name || !body) continue;
+    const tbl = ensureTable(owner, name, 'TRIGGER');
+    // Dodaj metadane triggera do extra jeśli brak
+    if (!tbl.extra['_trigger_meta']) {
+      tbl.extra['_trigger_meta'] = [{
+        TRIGGER_TYPE:      trgType,
+        TRIGGERING_EVENT:  col(row,'TRIGGERING_EVENT'),
+        TABLE_OWNER:       col(row,'TABLE_OWNER'),
+        TABLE_NAME:        col(row,'TABLE_NAME'),
+        STATUS:            col(row,'STATUS'),
+      }];
+    }
+    // Dodaj treść tylko jeśli nie ma już linii z ALL_SOURCE
+    if (tbl.sources.length === 0) {
+      tbl.sources.push({
+        type: 'TRIGGER',
+        text: body,
+        line: '',  // cały blok — będzie podzielony po \n przy wyświetlaniu
+        raw: row,
+      });
+    }
+  }
+
+  // ── ANY OTHER SHEETS ──
+  const knownKeys = new Set(SHEET_SIGNATURES.map(s=>s.key));
+  for (const sk of Object.keys(db.sheets)) {
+    if (knownKeys.has(sk)) continue;
+    for (const row of db.sheets[sk]) {
+      const owner = col(row,'OWNER','SCHEMA','TABLE_OWNER','TABLEOWNER');
+      const table = col(row,'TABLE_NAME','TABLENAME','TABLE','TABNAME');
+      if (!table) continue;
+      const tbl = ensureTable(owner,table);
+      if (!tbl.extra[sk]) tbl.extra[sk]=[];
+      tbl.extra[sk].push(row);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// RELATIONS — FK graph + SQL generator
+// ══════════════════════════════════════════════════════
+
+// Zwróć tablicę kolumn danego constraintu (po nazwie constraintu)
+function getConstraintCols(owner, table, constraintName) {
+  if (!constraintName) return [];
+  const tbl = db.owners[owner?.toUpperCase()]?.tables[table?.toUpperCase()];
+  if (!tbl) return [];
+  const cn = constraintName.toUpperCase();
+  const found = tbl.constraints.find(c => (c.name||'').toUpperCase() === cn);
+  if (!found) return [];
+  return found.colList && found.colList.length ? found.colList : (found.columns ? found.columns.split(',').map(s=>s.trim()) : []);
+}
+
+// Zbierz wszystkie relacje dla danej tabeli
+function buildRelations(tbl) {
+  const outgoing = [];
+  const incoming = [];
+
+  // Outgoing FK: ta tabela → inna
+  for (const c of tbl.constraints) {
+    if ((c.type||'').toUpperCase() !== 'R') continue;
+    const refOwner = (c.refOwner || tbl.owner).toUpperCase();
+    const refTable = (c.refTable || '').toUpperCase();
+    if (!refTable) continue;
+
+    // Kolumny FK po stronie tej tabeli
+    const fkCols = c.colList && c.colList.length
+      ? c.colList
+      : (c.columns ? c.columns.split(',').map(s=>s.trim()).filter(Boolean) : []);
+
+    // Kolumny PK/UK po stronie tabeli docelowej — przez R_CONSTRAINT_NAME
+    const pkCols = getConstraintCols(refOwner, refTable, c.refConstraint);
+
+    outgoing.push({
+      fkName:    c.name,
+      fkCols,              // tablica kolumn FK
+      refOwner,
+      refTable,
+      refCols:   pkCols,   // tablica kolumn PK/UK w tabeli docelowej
+      refConstraint: c.refConstraint,
+    });
+  }
+
+  // Incoming FK: inna tabela → ta
+  for (const [ownerKey, ownerObj] of Object.entries(db.owners)) {
+    for (const [tname, t] of Object.entries(ownerObj.tables)) {
+      if (t === tbl) continue;
+      for (const c of t.constraints) {
+        if ((c.type||'').toUpperCase() !== 'R') continue;
+        const refOwner = (c.refOwner || ownerKey).toUpperCase();
+        const refTable = (c.refTable || '').toUpperCase();
+        if (refOwner !== tbl.owner || refTable !== tbl.name) continue;
+
+        const fkCols = c.colList && c.colList.length
+          ? c.colList
+          : (c.columns ? c.columns.split(',').map(s=>s.trim()).filter(Boolean) : []);
+
+        const pkCols = getConstraintCols(tbl.owner, tbl.name, c.refConstraint);
+
+        incoming.push({
+          srcOwner: ownerKey,
+          srcTable: tname,
+          fkName:   c.name,
+          fkCols,
+          refCols:  pkCols,
+        });
+      }
+    }
+  }
+
+  return { outgoing, incoming };
+}
+
+function countRelations(tbl) {
+  const { outgoing, incoming } = buildRelations(tbl);
+  return outgoing.length + incoming.length;
+}
+
+function generateJoinSql(tbl, rel, direction) {
+  const aOwner = tbl.owner;
+  const aTable = tbl.name;
+  const aAlias = makeAlias(aTable);
+
+  let bOwner, bTable, bAlias_, joinPairs;
+
+  if (direction === 'out') {
+    bOwner  = rel.refOwner;
+    bTable  = rel.refTable;
+    bAlias_ = makeAlias(bTable, aAlias);
+    // fkCols[i] w tabeli A ←→ refCols[i] w tabeli B
+    const fk = rel.fkCols;
+    const pk = rel.refCols.length ? rel.refCols : rel.fkCols; // fallback jeśli brak PK
+    joinPairs = fk.map((fc, i) => `${aAlias}.${fc} = ${bAlias_}.${pk[i] || fc}`);
+  } else {
+    bOwner  = rel.srcOwner;
+    bTable  = rel.srcTable;
+    bAlias_ = makeAlias(bTable, aAlias);
+    // refCols[i] w tabeli A (PK) ←→ fkCols[i] w tabeli B
+    const pk = rel.refCols.length ? rel.refCols : rel.fkCols;
+    const fk = rel.fkCols;
+    joinPairs = pk.map((pc, i) => `${aAlias}.${pc} = ${bAlias_}.${fk[i] || pc}`);
+  }
+
+  const onClause = joinPairs.length > 1
+    ? joinPairs.join('\n   AND ')
+    : joinPairs[0] || '/* brak kolumn FK */';
+
+  return `SELECT\n    ${aAlias}.*,\n    ${bAlias_}.*\nFROM ${aOwner}.${aTable} ${aAlias}\nJOIN ${bOwner}.${bTable} ${bAlias_}\n  ON ${onClause};`;
+}
+
+function makeAlias(tableName, existingAlias) {
+  // Wygeneruj 2-3 literowy alias z nazwy tabeli, unikaj kolizji
+  const base = tableName.replace(/[^A-Z0-9]/gi, '').substring(0, 3).toLowerCase() || 't';
+  if (!existingAlias || base !== existingAlias) return base;
+  return base + '2'; // kolizja — dodaj cyfre
+}
+
+function copyToClipboard(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓ Skopiowano';
+    btn.style.color = 'var(--success)';
+    setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1800);
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
+// Filtruje sidebar wg zbioru trafionych tabel (podczas wyszukiwania)
+function filterTreeByHits(hitTables, hitOwners) {
+  document.querySelectorAll('.owner-node').forEach(ownerNode => {
+    const items = ownerNode.querySelectorAll('.table-item');
+    const ownerName = items[0]?.dataset.owner || '';
+    // Jeśli owner trafiony — pokaż wszystkich jego members? Nie — tylko trafione
+    let visible = 0;
+    items.forEach(item => {
+      const key = `${item.dataset.owner}||${item.dataset.table}`;
+      const show = hitTables.has(key);
+      item.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    // Pokaż ownera jeśli ma trafione obiekty LUB sam owner był trafiony
+    const ownerHit = hitOwners.includes(ownerName);
+    ownerNode.style.display = (visible > 0 || ownerHit) ? '' : 'none';
+    if (visible > 0 || ownerHit) ownerNode.classList.add('open');
+    const badge = ownerNode.querySelector('[data-owner-badge]');
+    if (badge) badge.textContent = visible || '';
+  });
+}
+// ══════════════════════════════════════════════════════
+
+const OBJ_META = {
+  TABLE:     { icon: '▦',  color: 'var(--text)',    label: 'Tabela' },
+  VIEW:      { icon: '◈',  color: 'var(--accent)',  label: 'Widok' },
+  PROCEDURE: { icon: '⚙',  color: 'var(--accent2)', label: 'Procedura' },
+  FUNCTION:  { icon: 'ƒ',  color: 'var(--accent2)', label: 'Funkcja' },
+  PACKAGE:   { icon: '❏',  color: 'var(--accent2)', label: 'Pakiet' },
+  TRIGGER:   { icon: '⚡', color: 'var(--warn)',    label: 'Trigger' },
+  SOURCE:    { icon: '📄', color: 'var(--muted)',   label: 'Źródło' },
+};
+function objMeta(t) { return OBJ_META[t] || OBJ_META.TABLE; }
+
+function scopeObjTypes(scope) {
+  if (scope === 'tables')  return new Set(['TABLE']);
+  if (scope === 'views')   return new Set(['VIEW']);
+  if (scope === 'columns') return new Set(['TABLE','VIEW']);
+  if (scope === 'indexes') return new Set(['TABLE']);
+  return null;
+}
+
+// Sortowanie jak Oracle: '_' traktowany jako większy od liter (sortuje się za nimi)
+function oracleSort(a, b) {
+  // Zamieniamy '_' na znak o kodzie wyższym niż 'Z' i 'z' (np. '~' = 126)
+  const norm = s => s.toUpperCase().replace(/_/g, '~');
+  return norm(a).localeCompare(norm(b));
+}
+
+function renderTree() {
+  const tree = document.getElementById('tree');
+  tree.innerHTML = '';
+  const owners = Object.keys(db.owners).sort(oracleSort);
+  if (!owners.length) {
+    tree.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:15px">Brak danych.</div>';
+    return;
+  }
+
+  // Renderuj WSZYSTKIE obiekty raz — filtrowanie przez display w filterTree()
+  for (const owner of owners) {
+    const tables = Object.keys(db.owners[owner].tables).sort(oracleSort);
+    if (!tables.length) continue;
+
+    const node = document.createElement('div');
+    node.className = 'owner-node';
+
+    const listItems = tables.map(t => {
+      const tbl = db.owners[owner].tables[t];
+      const m = objMeta(tbl.objType || 'TABLE');
+      const isTable = !tbl.objType || tbl.objType === 'TABLE';
+      return `<div class="table-item"
+          data-owner="${owner}"
+          data-table="${t}"
+          data-objtype="${tbl.objType || 'TABLE'}"
+          onclick="showTable('${owner}','${t.replace(/'/g,"\\'")}')">
+        <span class="tbl-icon" style="color:${m.color}" title="${m.label}">${m.icon}</span>
+        <span class="tbl-name" style="${isTable ? '' : 'color:'+m.color}">${t}</span>
+      </div>`;
+    }).join('');
+
+    node.innerHTML = `
+      <div class="owner-header" onclick="this.parentNode.classList.toggle('open')">
+        <span class="arrow">▶</span>
+        <span style="font-size:13px">👤</span>
+        <span class="owner-name">${owner}</span>
+        <span class="count-badge" data-owner-badge="${owner}">${tables.length}</span>
+      </div>
+      <div class="table-list" id="owner_${CSS.escape(owner)}">${listItems}</div>`;
+    tree.appendChild(node);
+  }
+
+  // Zastosuj aktualny filtr zakresu
+  filterTree(searchScope);
+}
+
+// Filtruje sidebar przez display — bez rerenderowania DOM
+function filterTree(scope) {
+  const allowed = scopeObjTypes(scope); // null = wszystko
+
+  document.querySelectorAll('.owner-node').forEach(ownerNode => {
+    const items = ownerNode.querySelectorAll('.table-item');
+    let visible = 0;
+    items.forEach(item => {
+      const objType = item.dataset.objtype || 'TABLE';
+      const show = !allowed || allowed.has(objType);
+      item.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    // Pokaż/ukryj całego ownera jeśli żaden obiekt nie pasuje
+    ownerNode.style.display = visible > 0 ? '' : 'none';
+
+    // Zaktualizuj licznik w badge
+    const badge = ownerNode.querySelector('[data-owner-badge]');
+    if (badge) badge.textContent = visible;
+  });
+
+  // Zaktualizuj globalny licznik w sidebarze
+  if (db.loaded) {
+    const totalVisible = document.querySelectorAll('.table-item:not([style*="display: none"])').length;
+    const owners = document.querySelectorAll('.owner-node:not([style*="display: none"])').length;
+    document.getElementById('sidebarCount').textContent = `${owners} / ${totalVisible}`;
+  }
+}
+
+function highlightSidebarItem(owner, table) {
+  document.querySelectorAll('.table-item').forEach(el => el.classList.remove('active'));
+  const item = document.querySelector(`.table-item[data-owner="${owner}"][data-table="${table}"]`);
+  if (item) {
+    item.classList.add('active');
+    // Otwórz ownera tylko jeśli element jest widoczny (nie ukryty przez filtr)
+    const ownerNode = item.closest('.owner-node');
+    if (ownerNode && ownerNode.style.display !== 'none') {
+      ownerNode.classList.add('open');
+      item.scrollIntoView({ block: 'nearest' });
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════
+// TABLE DETAIL
+// ══════════════════════════════════════════════════════
+function showTable(owner, table, focusTab) {
+  currentOwner = owner; currentTable = table;
+  // NIE czyścimy pola wyszukiwania — użytkownik może wrócić do wyników
+  document.getElementById('searchResultsPanel').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('detailPanel').style.display = 'flex';
+  document.getElementById('detailPanel').style.flexDirection = 'column';
+  highlightSidebarItem(owner, table);
+
+  const tbl = db.owners[owner].tables[table];
+  document.getElementById('detailOwner').textContent = owner;
+  document.getElementById('detailTableName').textContent = table;
+  document.getElementById('detailTitle').textContent = table;
+  // Pokaż przycisk powrotu jeśli jest aktywne wyszukiwanie
+  const hasSearch = document.getElementById('searchInput').value.trim().length > 0;
+  document.getElementById('detailBackBtn').style.display = hasSearch ? 'inline' : 'none';
+
+  const meta = document.getElementById('detailMeta');
+  meta.innerHTML = '';
+  const addPill = (icon, label, val) => meta.innerHTML += `<div class="meta-pill">${icon} ${label}: <span class="val">${val}</span></div>`;
+  addPill('📋','Kolumny',tbl.columns.length);
+  addPill('🔑','Indeksy',tbl.indexes.length);
+  addPill('🔗','Ograniczenia',tbl.constraints.length);
+  if (tbl.sources.length) addPill('📝','Źródło',tbl.sources.length+' linii');
+  // Meta pills z ALL_TABLES
+  if (tbl.tableProps) {
+    const p = tbl.tableProps;
+    if (p.num_rows)     addPill('📊','Wiersze', Number(p.num_rows).toLocaleString('pl-PL'));
+    if (p.tablespace)   addPill('💿','Tablespace', p.tablespace);
+    if (p.partitioned === 'YES') addPill('🔀','Partycje', 'TAK');
+    if (p.compression === 'ENABLED') addPill('🗜','Kompresja', p.compress_for || 'BASIC');
+    if (p.last_analyzed) addPill('🔬','Statystyki', p.last_analyzed);
+  }
+  if (tbl.comments.length && tbl.comments[0].comment)
+    meta.innerHTML += `<div class="meta-pill" style="max-width:600px;white-space:normal">💬 <span style="color:var(--muted)">${tbl.comments[0].comment}</span></div>`;
+
+  const tabs = [];
+  if (tbl.tableProps)          tabs.push({id:'props', label:'Właściwości'});
+  if (tbl.columns.length)      tabs.push({id:'cols',  label:`Kolumny (${tbl.columns.length})`});
+  if (tbl.indexes.length)      tabs.push({id:'idx',   label:`Indeksy (${tbl.indexes.length})`});
+  if (tbl.constraints.length)  tabs.push({id:'cons',  label:`Ograniczenia (${tbl.constraints.length})`});
+  // Zakładka relacji — jeśli tabela ma FK lub inne tabele wskazują na nią
+  const relCount = countRelations(tbl);
+  if (relCount > 0)            tabs.push({id:'rel',   label:`Relacje (${relCount})`});
+  if (tbl.sources.length)      tabs.push({id:'src',   label:'Źródło'});
+  if (tbl.comments.length)     tabs.push({id:'cmt',   label:'Komentarze'});
+  for (const sk of Object.keys(tbl.extra).filter(k => !k.startsWith('_'))) tabs.push({id:'ex_'+sk, label:sk});
+  if (!tabs.length) tabs.push({id:'empty', label:'Dane'});
+
+  // Wybierz zakładkę: focusTab jeśli podany i istnieje, inaczej pierwsza
+  const startTab = (focusTab && tabs.find(t => t.id === focusTab)) ? focusTab : tabs[0]?.id;
+
+  document.getElementById('tabsBar').innerHTML = tabs.map(t=>
+    `<div class="tab ${t.id===startTab?'active':''}" onclick="switchTab('${t.id}',this)">${t.label}</div>`
+  ).join('');
+  renderTabContent(startTab, tbl);
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  renderTabContent(id, db.owners[currentOwner].tables[currentTable]);
+}
+
+function renderTabContent(id, tbl) {
+  const tc = document.getElementById('tabContent');
+  tc.innerHTML = '';
+
+  if (id === 'props') {
+    const p = tbl.tableProps;
+    if (!p) { tc.innerHTML = '<p class="no-data">Brak danych ALL_TABLES.</p>'; return; }
+
+    // Formatowanie liczby
+    const num = v => v ? Number(v).toLocaleString('pl-PL') : '—';
+    const val = v => v || '—';
+    const yesno = v => v === 'YES' ? '<span style="color:var(--success)">✓ TAK</span>'
+                     : v === 'NO'  ? '<span style="color:var(--muted)">✗ NIE</span>'
+                     : v ? escHtml(v) : '—';
+
+    const section = (title, rows) => `
+      <div class="props-section">
+        <div class="props-section-title">${title}</div>
+        <table class="props-table">
+          ${rows.map(([label, value]) => `
+            <tr>
+              <td class="prop-label">${label}</td>
+              <td class="prop-value">${value}</td>
+            </tr>`).join('')}
+        </table>
+      </div>`;
+
+    tc.innerHTML = `<div class="props-grid">
+      ${section('Ogólne', [
+        ['Tablespace',      `<span style="color:var(--accent);font-family:var(--mono)">${val(p.tablespace)}</span>`],
+        ['Status',          p.status === 'VALID' ? '<span style="color:var(--success)">✓ VALID</span>' : `<span style="color:var(--danger)">${val(p.status)}</span>`],
+        ['Partycjonowanie', yesno(p.partitioned)],
+        ['Kompresja',       p.compression === 'ENABLED' ? `<span style="color:var(--success)">✓ ${val(p.compress_for)}</span>` : '<span style="color:var(--muted)">✗ NIE</span>'],
+        ['Row Movement',    yesno(p.row_movement)],
+        ['Read Only',       yesno(p.read_only)],
+        ['Logging',         yesno(p.logging)],
+        ['Cache',           p.cache?.trim() === 'Y' ? '<span style="color:var(--success)">✓ TAK</span>' : '<span style="color:var(--muted)">✗ NIE</span>'],
+        ['Monitoring',      yesno(p.monitoring)],
+        ['IOT Type',        val(p.iot_type)],
+        ['Cluster',         val(p.cluster_name)],
+      ])}
+      ${section('Statystyki', [
+        ['Liczba wierszy',  `<strong>${num(p.num_rows)}</strong>`],
+        ['Bloki',           num(p.blocks)],
+        ['Śr. dł. wiersza', p.avg_row_len ? `${val(p.avg_row_len)} B` : '—'],
+        ['Próbka (SAMPLE)', num(p.sample_size)],
+        ['Ostatnia analiza',val(p.last_analyzed)],
+        ['Global Stats',    yesno(p.global_stats)],
+      ])}
+      ${section('Przechowywanie', [
+        ['PCT_FREE',        val(p.pct_free)],
+        ['INI_TRANS',       val(p.ini_trans)],
+        ['Stopień (DEGREE)',val(p.degree)],
+        ['Result Cache',    val(p.result_cache)],
+        ['Dependencies',    val(p.dependencies)],
+        ['Duration',        val(p.duration)],
+      ])}
+    </div>`;
+    return;
+  }
+
+  if (id === 'cols') {
+    if (!tbl.columns.length) { tc.innerHTML='<p class="no-data">Brak danych.</p>'; return; }
+    const pkCols = new Set();
+    for (const c of tbl.constraints) if ((c.type||'').toUpperCase().includes('P')) pkCols.add(c.columns.toUpperCase());
+    const cols = [...tbl.columns].sort((a,b)=>(parseInt(a.pos)||999)-(parseInt(b.pos)||999));
+    tc.innerHTML = `<table class="data-table"><thead><tr>
+      <th>#</th><th>Nazwa</th><th>Typ</th><th>Dług.</th><th>Prec.</th><th>Skala</th>
+      <th>Nullable</th><th>Domyślna</th><th>Komentarz</th>
+    </tr></thead><tbody>${cols.map(c=>{
+      const isPK = pkCols.has((c.name||'').toUpperCase());
+      const nu = (c.nullable||'').toUpperCase();
+      const nullOk = nu==='Y'||nu==='YES'||nu==='1'||nu==='TRUE';
+      return `<tr>
+        <td style="color:var(--muted)">${c.pos||''}</td>
+        <td style="font-weight:600">${c.name}${isPK?'<span class="pk-badge">PK</span>':''}</td>
+        <td><span class="type-badge">${c.type||'—'}</span></td>
+        <td style="color:var(--muted)">${c.length||''}</td>
+        <td style="color:var(--muted)">${c.precision||''}</td>
+        <td style="color:var(--muted)">${c.scale||''}</td>
+        <td>${c.nullable?`<span class="nullable-dot ${nullOk?'nullable-yes':'nullable-no'}" title="${c.nullable}"></span>`:''}</td>
+        <td style="color:var(--muted);max-width:130px;overflow:hidden;text-overflow:ellipsis">${c.default_||''}</td>
+        <td class="comment-cell">${c.comment||''}</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  }
+  else if (id === 'idx') {
+    if (!tbl.indexes.length) { tc.innerHTML='<p class="no-data">Brak indeksów.</p>'; return; }
+    // indexes already have columns merged as string in buildModel
+    // deduplicate by name (in case both ALL_INDEXES and ALL_IND_COLUMNS loaded)
+    const seen = {};
+    for (const ix of tbl.indexes) {
+      const k = ix.name || '?';
+      if (!seen[k]) {
+        seen[k] = {...ix};
+      } else {
+        // prefer the entry that has columns filled in
+        if (!seen[k].columns && ix.columns) seen[k] = {...ix};
+        // merge uniqueness/type from meta entry
+        if (!seen[k].uniqueness && ix.uniqueness) seen[k].uniqueness = ix.uniqueness;
+        if (!seen[k].type && ix.type) seen[k].type = ix.type;
+        if (!seen[k].status && ix.status) seen[k].status = ix.status;
+      }
+    }
+    tc.innerHTML = `<table class="data-table"><thead><tr>
+      <th>Nazwa indeksu</th><th>Typ</th><th>Unikalny</th><th>Kolumny</th><th>Partycja</th><th>Status</th>
+    </tr></thead><tbody>
+      ${Object.values(seen).map(ix=>{
+        const isU = (ix.uniqueness||'').toUpperCase().includes('UNIQUE') || (ix.uniqueness||'').toUpperCase()==='Y';
+        return `<tr>
+          <td style="color:var(--accent2);font-weight:600">${ix.name||'—'}</td>
+          <td><span class="type-badge tag-idx">${ix.type||'—'}</span></td>
+          <td style="text-align:center">${isU ? '<span style="color:var(--success);font-weight:700">✓</span>' : ''}</td>
+          <td style="color:var(--text)">${ix.columns||'—'}</td>
+          <td style="color:var(--muted)">${ix.partitioned||''}</td>
+          <td style="color:var(--muted)">${ix.status||''}</td>
+        </tr>`;
+      }).join('')}
+    </tbody></table>`;
+  }
+  else if (id === 'cons') {
+    if (!tbl.constraints.length) { tc.innerHTML='<p class="no-data">Brak ograniczeń.</p>'; return; }
+    tc.innerHTML = `<table class="data-table"><thead><tr><th>Nazwa</th><th>Typ</th><th>Kolumny/Warunek</th><th>Ref. tabela</th><th>Status</th></tr></thead><tbody>
+      ${tbl.constraints.map(c=>{
+        const tl = {P:'PK',R:'FK',U:'UNIQUE',C:'CHECK'}[c.type?.toUpperCase()]||c.type||'—';
+        return `<tr>
+          <td style="color:var(--warn)">${c.name||'—'}</td>
+          <td><span class="type-badge ${tl==='FK'?'tag-fk':tl==='PK'?'tag-pk':'tag-idx'}">${tl}</span></td>
+          <td style="color:var(--muted)">${c.columns||''}</td>
+          <td style="color:var(--muted)">${c.refTable?(c.refOwner?c.refOwner+'.':'')+c.refTable:''}</td>
+          <td style="color:var(--muted)">${c.status||''}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+  }
+  else if (id === 'src') {
+    const sorted = [...tbl.sources].sort((a,b) => (parseInt(a.line)||0) - (parseInt(b.line)||0));
+
+    // Metadane triggera (jeśli dostępne)
+    let metaHtml = '';
+    const trigMeta = tbl.extra?.['_trigger_meta']?.[0];
+    if (trigMeta) {
+      const pills = [
+        trigMeta.TRIGGER_TYPE     && `<span class="meta-pill">⚡ ${escHtml(trigMeta.TRIGGER_TYPE)}</span>`,
+        trigMeta.TRIGGERING_EVENT && `<span class="meta-pill">🎯 ${escHtml(trigMeta.TRIGGERING_EVENT)}</span>`,
+        trigMeta.TABLE_NAME       && `<span class="meta-pill">▦ ${trigMeta.TABLE_OWNER ? escHtml(trigMeta.TABLE_OWNER)+'.' : ''}${escHtml(trigMeta.TABLE_NAME)}</span>`,
+        trigMeta.STATUS           && `<span class="meta-pill" style="color:${trigMeta.STATUS==='ENABLED'?'var(--success)':'var(--danger)'}">● ${escHtml(trigMeta.STATUS)}</span>`,
+      ].filter(Boolean).join('');
+      if (pills) metaHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${pills}</div>`;
+    }
+
+    // Wykryj typ zawartości:
+    // — ALL_SOURCE: wiele rekordów z numerem linii → każdy rekord to linia kodu
+    // — ALL_VIEWS / ALL_TRIGGERS: jeden rekord bez numeru → cały tekst jako blok
+    let lines = [];
+    const hasLineNumbers = sorted.some(s => s.line && parseInt(s.line) > 0);
+
+    if (hasLineNumbers) {
+      // ALL_SOURCE — każdy rekord to jedna linia, tekst może kończyć się \n
+      lines = sorted.map(s => (s.text || '').replace(/\r?\n$/, ''));
+    } else {
+      // Jeden blok tekstu — widok, trigger z ALL_TRIGGERS
+      const fullText = sorted.map(s => s.text || '').join('');
+      lines = fullText.split(/\r?\n/);
+      // Usuń puste linie tylko z końca
+      while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+    }
+
+    if (!lines.length) { tc.innerHTML = metaHtml + '<p class="no-data">Brak kodu źródłowego.</p>'; return; }
+
+    const digits = Math.max(String(lines.length).length, 3);
+    const rowsHtml = lines.map((line, i) => {
+      const num = String(i + 1).padStart(digits, ' ');
+      return `<tr>
+        <td class="src-lineno">${num}</td>
+        <td class="src-code">${escHtml(line)}</td>
+      </tr>`;
+    }).join('');
+
+    tc.innerHTML = metaHtml + `<table class="src-table"><tbody>${rowsHtml}</tbody></table>`;
+  }
+  else if (id === 'rel') {
+    const { outgoing, incoming } = buildRelations(tbl);
+
+    const relSection = (title, icon, rels, direction) => {
+      if (!rels.length) return '';
+      const rows = rels.map((r, idx) => {
+        const isOut = direction === 'out';
+        const otherOwner = isOut ? r.refOwner : r.srcOwner;
+        const otherTable = isOut ? r.refTable : r.srcTable;
+        const thisCols   = isOut ? r.fkCols   : r.refCols;
+        const otherCols  = isOut ? r.refCols   : r.fkCols;
+        const sql = generateJoinSql(tbl, r, direction);
+        const sqlId = `sql_${direction}_${idx}`;
+        return `
+          <div class="rel-item">
+            <div class="rel-header">
+              <span class="rel-arrow">${isOut ? '→' : '←'}</span>
+              <span class="rel-table" onclick="showTable('${otherOwner}','${otherTable}')" title="Przejdź do tabeli">
+                ${otherOwner}.${otherTable}
+              </span>
+              <span class="rel-fk-name">${r.fkName || ''}</span>
+            </div>
+            <div class="rel-cols">
+              <span class="rel-col-group">
+                <span class="rel-col-label">${isOut ? tbl.name : otherTable}:</span>
+                <span class="rel-col-vals">${escHtml((thisCols||[]).join(', ') || '—')}</span>
+              </span>
+              <span class="rel-join-sym">⟷</span>
+              <span class="rel-col-group">
+                <span class="rel-col-label">${isOut ? otherTable : tbl.name}:</span>
+                <span class="rel-col-vals">${escHtml((otherCols||[]).join(', ') || '—')}</span>
+              </span>
+            </div>
+            <div class="rel-sql-wrap">
+              <div class="rel-sql-header">
+                <span style="font-size:12px;color:var(--muted)">SQL JOIN</span>
+                <button class="rel-copy-btn" onclick="copyToClipboard(document.getElementById('${sqlId}').textContent, this)">📋 Kopiuj</button>
+              </div>
+              <pre class="rel-sql" id="${sqlId}">${escHtml(sql)}</pre>
+            </div>
+          </div>`;
+      }).join('');
+      return `<div class="rel-section">
+        <div class="rel-section-title">${icon} ${title} (${rels.length})</div>
+        ${rows}
+      </div>`;
+    };
+
+    tc.innerHTML = outgoing.length + incoming.length === 0
+      ? '<p class="no-data">Brak relacji FK dla tej tabeli.</p>'
+      : relSection('Wychodzące FK (ta tabela → inna)', '🔑', outgoing, 'out') +
+        relSection('Przychodzące FK (inna tabela → ta)', '🔗', incoming, 'in');
+  }
+  else if (id === 'cmt') {
+    tc.innerHTML=tbl.comments.map(c=>`<div style="padding:10px 0;border-bottom:1px solid var(--border);color:var(--muted);font-size:16px;line-height:1.6">${escHtml(c.comment)}</div>`).join('');
+  }
+  else if (id.startsWith('ex_')) {
+    const sk=id.slice(3), rows=tbl.extra[sk]||[];
+    if (!rows.length) { tc.innerHTML='<p class="no-data">Brak danych.</p>'; return; }
+    const keys=Object.keys(rows[0]);
+    tc.innerHTML=`<table class="data-table"><thead><tr>${keys.map(k=>`<th>${k}</th>`).join('')}</tr></thead><tbody>
+      ${rows.map(r=>`<tr>${keys.map(k=>`<td>${escHtml(String(r[k]??''))}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  }
+  else { tc.innerHTML='<p class="no-data">Brak danych.</p>'; }
+}
+
+// ══════════════════════════════════════════════════════
+// SEARCH
+// ══════════════════════════════════════════════════════
+document.getElementById('searchInput').addEventListener('input', e => {
+  const q = e.target.value;
+  document.getElementById('searchClear').classList.toggle('visible', q.length > 0);
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(()=>doSearch(q), 180);
+});
+
+function backToSearch() {
+  document.getElementById('detailPanel').style.display = 'none';
+  document.getElementById('searchResultsPanel').style.display = 'flex';
+}
+
+function clearSearch() {
+  const inp = document.getElementById('searchInput');
+  inp.value = '';
+  document.getElementById('searchClear').classList.remove('visible');
+  inp.focus();
+  // Przywróć sidebar i panel
+  document.getElementById('searchResultsPanel').style.display = 'none';
+  if (db.loaded) filterTree(searchScope); // przywróć normalny filtr
+  if (currentTable) {
+    document.getElementById('detailPanel').style.display = 'flex';
+  } else {
+    document.getElementById('emptyState').style.display = 'flex';
+  }
+}
+document.querySelectorAll('.scope-btn').forEach(btn => btn.addEventListener('click', ()=>{
+  document.querySelectorAll('.scope-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  searchScope = btn.dataset.scope;
+  if (db.loaded) filterTree(searchScope); // tylko display toggle, bez rerenderu
+  doSearch(document.getElementById('searchInput').value);
+}));
+
+function doSearch(q) {
+  q = q.trim();
+  if (!q || !db.loaded) {
+    document.getElementById('searchResultsPanel').style.display='none';
+    filterTree(searchScope); // przywróć normalny filtr sidebara
+    if (!currentTable) document.getElementById('emptyState').style.display='flex';
+    return;
+  }
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('detailPanel').style.display='none';
+  document.getElementById('searchResultsPanel').style.display='flex';
+  const ql=q.toLowerCase(), results={owners:[],tables:[],views:[],sources:[],columns:[],indexes:[],constraints:[]};
+
+  // Zbiór trafień do filtrowania sidebara: "OWNER||TABLE"
+  const hitTables = new Set();
+
+  for (const [owner,ownerObj] of Object.entries(db.owners)) {
+    if (searchScope==='all' && owner.toLowerCase().includes(ql)) results.owners.push({owner});
+    for (const [tname,tbl] of Object.entries(ownerObj.tables)) {
+      const objType = tbl.objType || 'TABLE';
+      const isTable = objType === 'TABLE';
+      const isView  = objType === 'VIEW';
+      const isSource = ['PROCEDURE','FUNCTION','PACKAGE','TRIGGER','SOURCE'].includes(objType);
+      let hit = false;
+
+      // Tabele
+      if ((searchScope==='all'||searchScope==='tables') && isTable && tname.toLowerCase().includes(ql))
+        { results.tables.push({owner, name:tname, colCount:tbl.columns.length, tbl}); hit=true; }
+      // Widoki
+      if ((searchScope==='all'||searchScope==='views') && isView && tname.toLowerCase().includes(ql))
+        { results.views.push({owner, name:tname, tbl}); hit=true; }
+      // Procedury/Pakiety/Triggery/Funkcje
+      if (searchScope==='all' && isSource && tname.toLowerCase().includes(ql))
+        { results.sources.push({owner, name:tname, objType, tbl}); hit=true; }
+      // Kolumny
+      if (searchScope==='all'||searchScope==='columns'||searchScope==='views')
+        for (const c of tbl.columns)
+          if ((searchScope!=='views' || isView) &&
+              ((c.name||'').toLowerCase().includes(ql)||(c.type||'').toLowerCase().includes(ql)||(c.comment||'').toLowerCase().includes(ql)))
+            { results.columns.push({owner,table:tname,col:c,isView}); hit=true; }
+      // Indeksy
+      if (searchScope==='all'||searchScope==='indexes')
+        for (const ix of tbl.indexes)
+          if ((ix.name||'').toLowerCase().includes(ql)||(ix.columns||'').toLowerCase().includes(ql))
+            { results.indexes.push({owner,table:tname,ix}); hit=true; }
+      // Ograniczenia
+      if (searchScope==='all')
+        for (const c of tbl.constraints)
+          if ((c.name||'').toLowerCase().includes(ql))
+            { results.constraints.push({owner,table:tname,con:c}); hit=true; }
+      if (hit) hitTables.add(`${owner}||${tname}`);
+    }
+  }
+
+  // Filtruj sidebar — pokazuj tylko trafione tabele
+  filterTreeByHits(hitTables, results.owners.map(r=>r.owner));
+  renderSearchResults(q, results);
+}
+
+function renderSearchResults(q, results) {
+  const container = document.getElementById('searchResultsContent');
+  const total = results.owners.length+results.tables.length+results.views.length+results.columns.length+results.indexes.length+results.constraints.length;
+  let html=`<div class="results-header">Znaleziono <strong>${total}</strong> wyników dla "<strong>${escHtml(q)}</strong>"</div>`;
+
+  const group = (title, items, fn) => items.length ? `<div class="result-group">
+    <div class="result-group-title" onclick="this.parentNode.classList.toggle('collapsed')">
+      <span class="rg-arrow">▼</span>${title} (${items.length})
+    </div>
+    <div class="result-group-body">${items.map(fn).join('')}</div>
+  </div>` : '';
+
+  html += group('Właściciele', results.owners.slice(0,20), r=>`
+    <div class="result-item" onclick="openOwner('${r.owner}')">
+      <span class="ri-icon">👤</span>
+      <div class="ri-main"><div class="ri-name">${hl(r.owner,q)}</div>
+      <div class="ri-path">${Object.keys(db.owners[r.owner].tables).length} obiektów</div></div></div>`);
+
+  html += group('Tabele', results.tables.slice(0,50), r=>`
+    <div class="result-item" onclick="showTable('${r.owner}','${r.name.replace(/'/g,"\\'")}','cols')">
+      <span class="ri-icon">▦</span>
+      <div class="ri-main"><div class="ri-name">${hl(r.name,q)}</div>
+      <div class="ri-path">${r.owner} · ${r.colCount} kol.${r.tbl?.tableProps?.num_rows ? ' · '+Number(r.tbl.tableProps.num_rows).toLocaleString('pl-PL')+' wierszy' : ''}</div></div></div>`);
+
+  html += group('Widoki', results.views.slice(0,50), r=>`
+    <div class="result-item" onclick="showTable('${r.owner}','${r.name.replace(/'/g,"\\'")}','src')">
+      <span class="ri-icon" style="color:var(--accent)">◈</span>
+      <div class="ri-main"><div class="ri-name" style="color:var(--accent)">${hl(r.name,q)}</div>
+      <div class="ri-path">${r.owner}${r.tbl.sources.length ? ' · '+r.tbl.sources.length+' linii' : ''}</div></div></div>`);
+
+  html += group('Kolumny', results.columns.slice(0,80), r=>`
+    <div class="result-item" onclick="showTable('${r.owner}','${r.table.replace(/'/g,"\\'")}','cols')">
+      <span class="ri-icon">◧</span>
+      <div class="ri-main"><div class="ri-name">${hl(r.col.name||'',q)}</div>
+      <div class="ri-path">${r.owner}.${r.table}</div>
+      <div class="ri-ctx"><span class="type-badge">${r.col.type||''}</span>${r.col.comment?' · '+escHtml(r.col.comment).slice(0,80):''}</div>
+      </div></div>`);
+
+  html += group('Indeksy', results.indexes.slice(0,40), r=>`
+    <div class="result-item" onclick="showTable('${r.owner}','${r.table.replace(/'/g,"\\'")}','idx')">
+      <span class="ri-icon">⚡</span>
+      <div class="ri-main"><div class="ri-name">${hl(r.ix.name||'',q)}</div>
+      <div class="ri-path">${r.owner}.${r.table}</div>
+      <div class="ri-ctx">${r.ix.columns||''}</div></div></div>`);
+
+  html += group('Ograniczenia', results.constraints.slice(0,40), r=>`
+    <div class="result-item" onclick="showTable('${r.owner}','${r.table.replace(/'/g,"\\'")}','cons')">
+      <span class="ri-icon">🔗</span>
+      <div class="ri-main"><div class="ri-name">${hl(r.con.name||'',q)}</div>
+      <div class="ri-path">${r.owner}.${r.table}</div>
+      <div class="ri-ctx">${r.con.type||''} ${r.con.columns||''}</div></div></div>`);
+
+  if (total===0) html+=`<div style="color:var(--muted);font-size:16px;padding:22px 0">Brak wyników dla "<strong>${escHtml(q)}</strong>"</div>`;
+  container.innerHTML = html;
+}
+
+function openOwner(owner) {
+  const node = document.getElementById(`owner_${CSS.escape(owner)}`);
+  if (node) node.closest('.owner-node').classList.add('open');
+}
+
+// ══════════════════════════════════════════════════════
+// SIDEBAR RESIZER
+// ══════════════════════════════════════════════════════
+const resizer = document.getElementById('resizer');
+const sidebar = document.getElementById('sidebar');
+let isResizing=false, startX, startW;
+resizer.addEventListener('mousedown', e=>{ isResizing=true; startX=e.clientX; startW=sidebar.offsetWidth; resizer.classList.add('resizing'); document.body.style.cssText='cursor:col-resize;user-select:none'; });
+document.addEventListener('mousemove', e=>{ if(!isResizing) return; sidebar.style.width=Math.max(150,Math.min(600,startW+e.clientX-startX))+'px'; });
+document.addEventListener('mouseup', ()=>{ if(!isResizing) return; isResizing=false; resizer.classList.remove('resizing'); document.body.style.cssText=''; });
+
+// ══════════════════════════════════════════════════════
+// THEME TOGGLE
+// ══════════════════════════════════════════════════════
+const themeBtn = document.getElementById('themeBtn');
+
+function applyTheme(dark) {
+  document.documentElement.classList.toggle('dark', dark);
+  themeBtn.textContent = dark ? '☀️' : '🌙';
+  themeBtn.title = dark ? 'Przełącz na jasny' : 'Przełącz na ciemny';
+  try { localStorage.setItem('dbBrowserTheme', dark ? 'dark' : 'light'); } catch(e){}
+}
+
+// Init from localStorage (already applied in <head> for dark; here we just set the button label)
+const _savedTheme = localStorage.getItem('dbBrowserTheme');
+const _isDark = _savedTheme === 'dark';
+themeBtn.textContent = _isDark ? '☀️' : '🌙';
+themeBtn.title = _isDark ? 'Przełącz na jasny' : 'Przełącz na ciemny';
+
+themeBtn.addEventListener('click', () => {
+  applyTheme(!document.documentElement.classList.contains('dark'));
+});
+
+function goToUploadScreen() {
+  document.getElementById('detailPanel').style.display = 'none';
+  document.getElementById('searchResultsPanel').style.display = 'none';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('emptyState').style.display = 'flex';
+  document.getElementById('idbBanner').style.display = 'none';
+}
+
+// ══════════════════════════════════════════════════════
+// SQL ZIP DOWNLOAD
+// ══════════════════════════════════════════════════════
+const SQL_FILES = {
+'01_ALL_TAB_COLUMNS.sql': `-- ============================================================
+-- 01_ALL_TAB_COLUMNS.sql
+-- Eksport: kolumny tabel i widokow wraz z komentarzami
+-- Zrodlo: ALL_TAB_COLUMNS + ALL_COL_COMMENTS
+-- Wynik zapisac jako: ALL_TAB_COLUMNS.xlsx
+-- ============================================================
+SELECT
+    c.OWNER,
+    c.TABLE_NAME,
+    c.COLUMN_NAME,
+    c.COLUMN_ID,
+    c.DATA_TYPE,
+    c.DATA_LENGTH,
+    c.DATA_PRECISION,
+    c.DATA_SCALE,
+    c.NULLABLE,
+    c.DATA_DEFAULT,
+    cm.COMMENTS
+FROM ALL_TAB_COLUMNS c
+LEFT JOIN ALL_COL_COMMENTS cm
+    ON cm.OWNER       = c.OWNER
+   AND cm.TABLE_NAME  = c.TABLE_NAME
+   AND cm.COLUMN_NAME = c.COLUMN_NAME
+WHERE c.OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY c.OWNER, c.TABLE_NAME, c.COLUMN_ID;
+`,
+
+'02_ALL_INDEXES.sql': `-- ============================================================
+-- 02_ALL_INDEXES.sql
+-- Eksport: indeksy (definicje)
+-- Zrodlo: ALL_INDEXES
+-- Wynik zapisac jako arkusz "ALL_INDEXES" w ALL_INDEXES.xlsx
+-- ============================================================
+SELECT
+    i.TABLE_OWNER,
+    i.TABLE_NAME,
+    i.INDEX_NAME,
+    i.INDEX_TYPE,
+    i.UNIQUENESS,
+    i.PARTITIONED,
+    i.STATUS
+FROM ALL_INDEXES i
+WHERE i.TABLE_OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY i.TABLE_OWNER, i.TABLE_NAME, i.INDEX_NAME;
+`,
+
+'03_ALL_IND_COLUMNS.sql': `-- ============================================================
+-- 03_ALL_IND_COLUMNS.sql
+-- Eksport: kolumny indeksow (kolejnosc, kierunek)
+-- Zrodlo: ALL_IND_COLUMNS
+-- Wynik zapisac jako arkusz "ALL_IND_COLUMNS" w ALL_INDEXES.xlsx
+-- ============================================================
+SELECT
+    ic.INDEX_OWNER,
+    ic.TABLE_NAME,
+    ic.INDEX_NAME,
+    ic.COLUMN_NAME,
+    ic.COLUMN_POSITION,
+    ic.DESCEND
+FROM ALL_IND_COLUMNS ic
+WHERE ic.INDEX_OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY ic.INDEX_OWNER, ic.TABLE_NAME, ic.INDEX_NAME, ic.COLUMN_POSITION;
+`,
+
+'04_ALL_CONSTRAINTS.sql': `-- ============================================================
+-- 04_ALL_CONSTRAINTS.sql
+-- Eksport: ograniczenia PK / FK / UK / CHECK
+-- Typy: P=PK, R=FK, U=UNIQUE, C=CHECK
+-- Wynik zapisac jako: ALL_CONSTRAINTS.xlsx
+-- ============================================================
+SELECT
+    c.OWNER,
+    c.TABLE_NAME,
+    c.CONSTRAINT_NAME,
+    c.CONSTRAINT_TYPE,
+    cc.COLUMN_NAME,
+    cc.POSITION         AS COLUMN_POSITION,
+    c.R_OWNER,
+    rc.TABLE_NAME       AS R_TABLE,
+    c.R_CONSTRAINT_NAME,
+    c.SEARCH_CONDITION,
+    c.STATUS,
+    c.VALIDATED
+FROM ALL_CONSTRAINTS c
+LEFT JOIN ALL_CONS_COLUMNS cc
+    ON cc.OWNER           = c.OWNER
+   AND cc.CONSTRAINT_NAME = c.CONSTRAINT_NAME
+LEFT JOIN ALL_CONSTRAINTS rc
+    ON rc.OWNER           = c.R_OWNER
+   AND rc.CONSTRAINT_NAME = c.R_CONSTRAINT_NAME
+WHERE c.OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+AND c.CONSTRAINT_TYPE IN ('P','R','U','C')
+ORDER BY c.OWNER, c.TABLE_NAME, c.CONSTRAINT_TYPE, c.CONSTRAINT_NAME, cc.POSITION;
+`,
+
+'05_ALL_VIEWS.sql': `-- ============================================================
+-- 05_ALL_VIEWS.sql
+-- Eksport: widoki z pelna definicja SQL
+-- Zrodlo: ALL_VIEWS
+-- Wynik zapisac jako: ALL_VIEWS.xlsx
+-- UWAGA: kolumna TEXT moze byc LONG/CLOB - w SQL Developer:
+--   Tools > Preferences > Database > Advanced > Max LOB size
+-- ============================================================
+SELECT
+    OWNER,
+    VIEW_NAME,
+    TEXT_LENGTH,
+    TEXT
+FROM ALL_VIEWS
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY OWNER, VIEW_NAME;
+`,
+
+'06_ALL_TAB_COMMENTS.sql': `-- ============================================================
+-- 06_ALL_TAB_COMMENTS.sql
+-- Eksport: komentarze do tabel i widokow
+-- Zrodlo: ALL_TAB_COMMENTS
+-- Wynik zapisac jako: ALL_TAB_COMMENTS.xlsx
+-- ============================================================
+SELECT
+    OWNER,
+    TABLE_NAME,
+    TABLE_TYPE,
+    COMMENTS
+FROM ALL_TAB_COMMENTS
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+AND COMMENTS IS NOT NULL
+ORDER BY OWNER, TABLE_NAME;
+`,
+
+'07_ALL_SOURCE.sql': `-- ============================================================
+-- 07_ALL_SOURCE.sql
+-- Eksport: zrodla procedur, funkcji, pakietow, triggerow
+-- Typy: PROCEDURE, FUNCTION, PACKAGE, PACKAGE BODY, TRIGGER
+-- Wynik zapisac jako: ALL_SOURCE.xlsx
+-- UWAGA: moze byc duzy zbior - mozna zawezic przez:
+--   AND TYPE IN ('PROCEDURE','FUNCTION')
+-- ============================================================
+SELECT
+    OWNER,
+    NAME,
+    TYPE,
+    LINE,
+    TEXT
+FROM ALL_SOURCE
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY OWNER, TYPE, NAME, LINE;
+`,
+
+'08_ALL_SEQUENCES.sql': `-- ============================================================
+-- 08_ALL_SEQUENCES.sql
+-- Eksport: sekwencje (generatory kluczy)
+-- Zrodlo: ALL_SEQUENCES
+-- Wynik zapisac jako: ALL_SEQUENCES.xlsx
+-- ============================================================
+SELECT
+    SEQUENCE_OWNER,
+    SEQUENCE_NAME,
+    MIN_VALUE,
+    MAX_VALUE,
+    INCREMENT_BY,
+    CYCLE_FLAG,
+    ORDER_FLAG,
+    CACHE_SIZE,
+    LAST_NUMBER
+FROM ALL_SEQUENCES
+WHERE SEQUENCE_OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY SEQUENCE_OWNER, SEQUENCE_NAME;
+`,
+
+'09_ALL_TRIGGERS.sql': `-- ============================================================
+-- 09_ALL_TRIGGERS.sql
+-- Eksport: triggery z trescia
+-- Zrodlo: ALL_TRIGGERS
+-- Wynik zapisac jako: ALL_TRIGGERS.xlsx
+-- ============================================================
+SELECT
+    OWNER,
+    TRIGGER_NAME,
+    TRIGGER_TYPE,
+    TRIGGERING_EVENT,
+    TABLE_OWNER,
+    TABLE_NAME,
+    STATUS,
+    TRIGGER_BODY
+FROM ALL_TRIGGERS
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY OWNER, TABLE_NAME, TRIGGER_NAME;
+`,
+
+'10_ALL_SYNONYMS.sql': `-- ============================================================
+-- 10_ALL_SYNONYMS.sql
+-- Eksport: synonimy (aliasy obiektow)
+-- Zrodlo: ALL_SYNONYMS
+-- Wynik zapisac jako: ALL_SYNONYMS.xlsx
+-- ============================================================
+SELECT
+    OWNER,
+    SYNONYM_NAME,
+    TABLE_OWNER,
+    TABLE_NAME,
+    DB_LINK
+FROM ALL_SYNONYMS
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY OWNER, SYNONYM_NAME;
+`,
+
+'11_ALL_TABLES.sql': `-- ============================================================
+-- 11_ALL_TABLES.sql
+-- Eksport: metadane tabel (wielkosc, partycje, kompresja, statystyki)
+-- Zrodlo: ALL_TABLES
+-- Wynik zapisac jako: ALL_TABLES.xlsx
+-- ============================================================
+SELECT
+    OWNER,
+    TABLE_NAME,
+    TABLESPACE_NAME,
+    STATUS,
+    PCT_FREE,
+    INI_TRANS,
+    MAX_TRANS,
+    INITIAL_EXTENT,
+    NEXT_EXTENT,
+    MIN_EXTENTS,
+    MAX_EXTENTS,
+    LOGGING,
+    NUM_ROWS,
+    BLOCKS,
+    EMPTY_BLOCKS,
+    AVG_SPACE,
+    CHAIN_CNT,
+    AVG_ROW_LEN,
+    DEGREE,
+    INSTANCES,
+    CACHE,
+    TABLE_LOCK,
+    SAMPLE_SIZE,
+    LAST_ANALYZED,
+    PARTITIONED,
+    IOT_TYPE,
+    ROW_MOVEMENT,
+    GLOBAL_STATS,
+    USER_STATS,
+    DURATION,
+    SKIP_CORRUPT,
+    MONITORING,
+    CLUSTER_NAME,
+    DEPENDENCIES,
+    COMPRESSION,
+    COMPRESS_FOR,
+    DROPPED,
+    READ_ONLY,
+    SEGMENT_CREATED,
+    RESULT_CACHE
+FROM ALL_TABLES
+WHERE OWNER NOT IN (
+    'SYS','SYSTEM','SYSMAN','DBSNMP','OUTLN','MDSYS','ORDSYS',
+    'EXFSYS','DMSYS','WMSYS','CTXSYS','ANONYMOUS','XDB','ORDPLUGINS',
+    'OLAPSYS','PUBLIC','APEX_PUBLIC_USER','FLOWS_FILES'
+)
+ORDER BY OWNER, TABLE_NAME;
+`,
+
+'README.txt': `Oracle Schema Browser — Instrukcja eksportu
+============================================
+
+KROK 1: Uruchom skrypty SQL
+----------------------------
+Otwórz kazdy plik .sql w Oracle SQL Developer:
+  File > Open > wybierz plik > Run (F5 lub zielony przycisk)
+
+Mozna tez uzyc SQL*Plus:
+  @01_ALL_TAB_COLUMNS.sql
+
+KROK 2: Eksportuj wyniki do XLSX
+---------------------------------
+W SQL Developer, w oknie wyników:
+  Kliknij prawym przyciskiem > Export...
+  Format: Microsoft Excel 2007+ (.xlsx)
+  Nazwa pliku: taka sama jak skrypt (np. ALL_TAB_COLUMNS.xlsx)
+
+KROK 3: Spakuj do ZIP
+-----------------------
+Zaznacz wszystkie pliki .xlsx > Prawy przycisk > Wyslij do > Skompresowany folder
+
+KROK 4: Wczytaj w aplikacji
+-----------------------------
+Przeciagnij plik ZIP na ekran glowny aplikacji DB Browser
+lub kliknij "Wybierz plik".
+
+Uwagi
+-----
+- Skrypt 07_ALL_SOURCE.sql moze generowac duzy plik dla baz z wieloma procedurami.
+  Mozna zawezic zakres dodajac: AND TYPE IN ('PROCEDURE','FUNCTION')
+- Kolumna TEXT w widokach (skrypt 05) to typ LONG/CLOB.
+  W SQL Developer ustaw: Tools > Preferences > Database > Advanced > Max LOB field size = 10000
+- Skrypty pomijaja systemowych uzytkownikow Oracle (SYS, SYSTEM, MDSYS itp.)
+  Mozna dostosowac liste wykluczen w sekcji WHERE OWNER NOT IN (...)
+`
+};
+
+function downloadSqlZip() {
+  // Build ZIP manually using deflate-store (no external lib needed for text files)
+  // We'll use a simple approach: create individual blobs and trigger downloads
+  // For a proper ZIP we use the already-loaded JSZip library
+  if (typeof JSZip === 'undefined') {
+    showAlert('Biblioteka JSZip nie jest jeszcze załadowana. Spróbuj za chwilę.', 'warn');
+    return;
+  }
+  const zip = new JSZip();
+  const folder = zip.folder('oracle_export_sql');
+  for (const [name, content] of Object.entries(SQL_FILES)) {
+    folder.file(name, content);
+  }
+  zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }).then(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'oracle_export_sql.zip';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// STARTUP — check IndexedDB
+// ══════════════════════════════════════════════════════
+checkStorageOnLoad();
+</script>
+</body>
+</html>
